@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#121212">
+    <meta name="description" content="Stream and download your favorite movies in HD quality">
+    <title>MovieFlix - Watch & Download HD Movies</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Appwrite SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/appwrite@14.0.0"></script>
+</head>
+<body>
+    <!-- Pull to Refresh Indicator -->
+    <div id="pullIndicator" class="pull-indicator">
+        🔄 Release to refresh...
+    </div>
+
+    <!-- Main App Container -->
+    <div class="app-container">
+        <!-- Sticky Header -->
+        <header class="header">
+            <div class="header-content">
+                <a href="#" class="logo">
+                    <span class="logo-icon">🎬</span>
+                    <span>MovieFlix</span>
+                </a>
+                <div class="search-container">
+                    <div class="search-wrapper">
+                        <input 
+                            type="text" 
+                            id="searchInput" 
+                            class="search-input" 
+                            placeholder="Search movies..."
+                            autocomplete="off"
+                        >
+                        <button id="clearSearch" class="clear-search">✕</button>
+                        <span class="search-icon">🔍</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Banner Ad Section -->
+        <section id="bannerAd" class="banner-ad">
+            <div class="banner-placeholder">
+                <p>Loading advertisement...</p>
+            </div>
+        </section>
+
+        <!-- Movies Section -->
+        <main>
+            <h2 class="section-title">Trending Movies</h2>
+            <div id="movieGrid" class="movie-grid">
+                <!-- Movie cards will be loaded here -->
+                <div class="loading-spinner">
+                    <div class="spinner"></div>
+                    <p class="loading-text">Loading movies...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Movie Detail View (SPA Style) -->
+    <div id="detailView" class="detail-view">
+        <header class="detail-header">
+            <button id="backButton" class="back-button">
+                <span>←</span>
+                <span>Back</span>
+            </button>
+        </header>
+        <div id="detailContent" class="detail-content">
+            <!-- Detail content loaded dynamically -->
+        </div>
+    </div>
+
+    <!-- Interstitial Ad Overlay -->
+    <div id="interstitialOverlay" class="interstitial-overlay">
+        <div class="interstitial-content">
+            <span class="interstitial-label">Advertisement</span>
+            <button id="interstitialClose" class="interstitial-close" disabled>
+                <span id="countdown" class="interstitial-countdown">5</span>
+            </button>
+            <a id="interstitialLink" href="#" target="_blank" rel="noopener">
+                <img id="interstitialImage" class="interstitial-image" src="" alt="Advertisement">
+            </a>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="js/config.js"></script>
+    <script src="js/script.js"></script>
+</body>
+</html>
