@@ -1,778 +1,652 @@
-// ==================================================
-// MOVIEFLIX - USER FRONTEND SCRIPT (FIXED)
-// ==================================================
+// js/script.js - User Frontend Logic
 
-// Wait for Appwrite SDK to load
-if (typeof Appwrite === 'undefined') {
-    console.error('❌ Appwrite SDK not loaded!');
-}
-
-// Appwrite Client Initialization
-const client = new Appwrite.Client();
-const databases = new Appwrite.Databases(client);
-
-// Initialize client with error handling
-try {
-    client
-        .setEndpoint(CONFIG.appwrite.endpoint)
-        .setProject(CONFIG.appwrite.projectId);
-    
-    if (CONFIG.debug) {
-        console.log('✅ Appwrite client initialized');
-        console.log('📍 Endpoint:', CONFIG.appwrite.endpoint);
-        console.log('📍 Project ID:', CONFIG.appwrite.projectId);
-        console.log('📍 Database ID:', CONFIG.appwrite.databaseId);
+class MovieApp {
+    constructor() {
+        this.movies = [];
+        this.filteredMovies = [];
+        this.appConfig = null;
+        this.currentMovie = null;
+        this.downloadLinks = {};
+        this.isRefreshing = false;
+        
+        this.init();
     }
-} catch (error) {
-    console.error('❌ Failed to initialize Appwrite:', error);
-}
 
-// ==================================================
-// CACHE MANAGEMENT SYSTEM
-// ==================================================
+    async init() {
+        this.bindElements();
+        this.bindEvents();
+        await this.loadData();
+        this.setupPullToRefresh();
+        this.setupNetworkListener();
+        this.hideSplashScreen();
+    }
 
-const CacheManager = {
-    /**
-     * Get cached movies with timestamp validation
-     */
-    getMovies() {
-        try {
-            const cached = localStorage.getItem(CONFIG.cache.moviesKey);
-            if (!cached) return null;
+    bindElements() {
+        // Splash screen
+        this.splashScreen = document.getElementById('splash-screen');
+        this.appContainer = document.getElementById('app-container');
+        
+        // Header
+        this.searchInput = document.getElementById('search-input');
+        this.clearSearchBtn = document.getElementById('clear-search');
+        this.refreshBtn = document.getElementById('refresh-btn');
+        
+        // Home view
+        this.homeView = document.getElementById('home-view');
+        this.movieGrid = document.getElementById('movie-grid');
+        this.noResults = document.getElementById('no-results');
+        this.skeletonLoader = document.getElementById('skeleton-loader');
+        
+        // Banner ad
+        this.bannerAdContainer = document.getElementById('banner-ad-container');
+        this.bannerAdImage = document.getElementById('banner-ad-image');
+        this.bannerAdLink = document.getElementById('banner-ad-link');
+        
+        // Detail view
+        this.detailView = document.getElementById('detail-view');
+        this.backBtn = document.getElementById('back-btn');
+        this.shareBtn = document.getElementById('share-btn');
+        this.detailTitle = document.getElementById('detail-title');
+        this.detailPoster = document.getElementById('detail-poster');
+        this.detailRating = document.getElementById('detail-rating');
+        this.detailYear = document.getElementById('detail-year');
+        this.detailDescription = document.getElementById('detail-description');
+        this.downloadBtns = document.querySelectorAll('.download-btn');
+        
+        // Interstitial ad
+        this.interstitialOverlay = document.getElementById('interstitial-overlay');
+        this.interstitialImage = document.getElementById('interstitial-image');
+        this.interstitialLink = document.getElementById('interstitial-link');
+        this.closeInterstitialBtn = document.getElementById('close-interstitial');
+        this.countdownEl = document.getElementById('countdown');
+        this.closeIcon = document.getElementById('close-icon');
+        this.skipTimer = document.getElementById('skip-timer');
+        
+        // Permanent poster ad
+        this.permanentPosterAd = document.getElementById('permanent-poster-ad');
+        this.permanentPosterImage = document.getElementById('permanent-poster-image');
+        this.permanentPosterLink = document.getElementById('permanent-poster-link');
+        
+        // Pull to refresh
+        this.pullRefresh = document.getElementById('pull-refresh');
+        
+        // Toast & Network
+        this.toastContainer = document.getElementById('toast-container');
+        this.networkStatus = document.getElementById('network-status');
+        
+        // Categories
+        this.categoryBtns = document.querySelectorAll('.category-btn');
+    }
 
-            const { data, timestamp, version } = JSON.parse(cached);
-            const serverVersion = localStorage.getItem(CONFIG.cache.versionKey);
-
-            // Check if cache is expired (3 hours)
-            const isExpired = Date.now() - timestamp > CONFIG.cache.duration;
-
-            // Check if server forced a refresh
-            const isInvalidated = serverVersion && version !== serverVersion;
-
-            if (isExpired || isInvalidated) {
-                this.clearMovies();
-                return null;
+    bindEvents() {
+        // Search
+        this.searchInput.addEventListener('input', (e) => this.handleSearch(e.target.value));
+        this.clearSearchBtn.addEventListener('click', () => this.clearSearch());
+        
+        // Refresh
+        this.refreshBtn.addEventListener('click', () => this.refreshData());
+        
+        // Back button
+        this.backBtn.addEventListener('click', () => this.hideDetailView());
+        
+        // Share button
+        this.shareBtn.addEventListener('click', () => this.shareMovie());
+        
+        // Download buttons
+        this.downloadBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => this.handleDownload(e.target.closest('.download-btn').dataset.quality));
+        });
+        
+        // Close interstitial
+        this.closeInterstitialBtn.addEventListener('click', () => this.closeInterstitial());
+        
+        // Category buttons
+        this.categoryBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => this.filterByCategory(e.target.dataset.category));
+        });
+        
+        // Handle browser back button
+        window.addEventListener('popstate', (e) => {
+            if (this.detailView && !this.detailView.classList.contains('hidden')) {
+                this.hideDetailView();
             }
+        });
+    }
 
-            if (CONFIG.debug) {
-                console.log('📦 Cache hit! Movies from localStorage');
+    // ============================================
+    // DATA LOADING & CACHING
+    // ============================================
+
+    async loadData() {
+        try {
+            this.showSkeletonLoader();
+            
+            // Check if cache is still valid
+            if (this.isCacheValid()) {
+                this.movies = this.getCachedMovies();
+                this.showToast('Loaded from cache', 'info');
+            } else {
+                // Fetch fresh data from Appwrite
+                await this.fetchMoviesFromAppwrite();
             }
-            return data;
+            
+            // Load app config (ads settings)
+            await this.loadAppConfig();
+            
+            this.filteredMovies = [...this.movies];
+            this.renderMovies();
+            this.hideSkeletonLoader();
+            
         } catch (error) {
-            console.error('Cache read error:', error);
-            return null;
-        }
-    },
-
-    /**
-     * Save movies to cache with timestamp
-     */
-    setMovies(movies) {
-        try {
-            const version = localStorage.getItem(CONFIG.cache.versionKey) || Date.now().toString();
-            localStorage.setItem(CONFIG.cache.moviesKey, JSON.stringify({
-                data: movies,
-                timestamp: Date.now(),
-                version: version
-            }));
-            if (CONFIG.debug) {
-                console.log('💾 Movies cached successfully');
+            console.error('Error loading data:', error);
+            this.showToast('Failed to load movies', 'error');
+            
+            // Try to use cached data if available
+            const cachedMovies = this.getCachedMovies();
+            if (cachedMovies.length > 0) {
+                this.movies = cachedMovies;
+                this.filteredMovies = [...this.movies];
+                this.renderMovies();
+                this.showToast('Showing cached data', 'warning');
             }
-        } catch (error) {
-            console.error('Cache write error:', error);
-        }
-    },
-
-    /**
-     * Clear movies cache
-     */
-    clearMovies() {
-        localStorage.removeItem(CONFIG.cache.moviesKey);
-        if (CONFIG.debug) {
-            console.log('🗑️ Movies cache cleared');
-        }
-    },
-
-    /**
-     * Get app configuration cache
-     */
-    getConfig() {
-        try {
-            const cached = localStorage.getItem(CONFIG.cache.configKey);
-            if (!cached) return null;
-
-            const { data, timestamp } = JSON.parse(cached);
-            const isExpired = Date.now() - timestamp > CONFIG.cache.duration;
-
-            if (isExpired) {
-                localStorage.removeItem(CONFIG.cache.configKey);
-                return null;
-            }
-
-            return data;
-        } catch (error) {
-            return null;
-        }
-    },
-
-    /**
-     * Save app configuration to cache
-     */
-    setConfig(config) {
-        try {
-            localStorage.setItem(CONFIG.cache.configKey, JSON.stringify({
-                data: config,
-                timestamp: Date.now()
-            }));
-        } catch (error) {
-            console.error('Config cache write error:', error);
-        }
-    },
-
-    /**
-     * Get remaining cache time
-     */
-    getCacheTimeRemaining() {
-        try {
-            const cached = localStorage.getItem(CONFIG.cache.moviesKey);
-            if (!cached) return 0;
-
-            const { timestamp } = JSON.parse(cached);
-            const remaining = CONFIG.cache.duration - (Date.now() - timestamp);
-            return Math.max(0, remaining);
-        } catch {
-            return 0;
+            this.hideSkeletonLoader();
         }
     }
-};
 
-// ==================================================
-// API SERVICE
-// ==================================================
-
-const ApiService = {
-    /**
-     * Fetch all movies from Appwrite
-     */
-    async fetchMovies(forceRefresh = false) {
-        // Check cache first
-        if (!forceRefresh) {
-            const cached = CacheManager.getMovies();
-            if (cached && cached.length > 0) {
-                return cached;
-            }
+    isCacheValid() {
+        const timestamp = localStorage.getItem(AppConfig.cacheKeys.moviesTimestamp);
+        const cacheVersion = localStorage.getItem(AppConfig.cacheKeys.cacheVersion);
+        const cachedData = localStorage.getItem(AppConfig.cacheKeys.movies);
+        
+        if (!timestamp || !cachedData) return false;
+        
+        const now = Date.now();
+        const cacheAge = now - parseInt(timestamp);
+        
+        // Check if cache is older than 3 hours
+        if (cacheAge > AppConfig.cacheDuration) return false;
+        
+        // Check if cache version matches (for admin-forced refresh)
+        const storedVersion = localStorage.getItem('stored_cache_version');
+        if (cacheVersion && storedVersion !== cacheVersion) {
+            localStorage.setItem('stored_cache_version', cacheVersion);
+            return false;
         }
+        
+        return true;
+    }
 
+    getCachedMovies() {
         try {
-            if (CONFIG.debug) {
-                console.log('🌐 Fetching movies from Appwrite...');
-                console.log('📂 Collection:', CONFIG.appwrite.collections.movies);
-            }
+            const cachedData = localStorage.getItem(AppConfig.cacheKeys.movies);
+            return cachedData ? JSON.parse(cachedData) : [];
+        } catch (error) {
+            console.error('Error parsing cached movies:', error);
+            return [];
+        }
+    }
 
+    cacheMovies(movies) {
+        try {
+            localStorage.setItem(AppConfig.cacheKeys.movies, JSON.stringify(movies));
+            localStorage.setItem(AppConfig.cacheKeys.moviesTimestamp, Date.now().toString());
+        } catch (error) {
+            console.error('Error caching movies:', error);
+        }
+    }
+
+    async fetchMoviesFromAppwrite() {
+        try {
             const response = await databases.listDocuments(
-                CONFIG.appwrite.databaseId,
-                CONFIG.appwrite.collections.movies,
+                AppConfig.databaseId,
+                AppConfig.collections.movies,
                 [
                     Appwrite.Query.orderDesc('$createdAt'),
                     Appwrite.Query.limit(100)
                 ]
             );
-
-            if (CONFIG.debug) {
-                console.log('✅ Movies fetched:', response.documents.length);
-            }
-
-            const movies = response.documents;
-            CacheManager.setMovies(movies);
-            return movies;
-        } catch (error) {
-            console.error('❌ Fetch movies error:', error);
-            console.error('Error details:', {
-                message: error.message,
-                code: error.code,
-                type: error.type
-            });
             
-            // Return empty array instead of throwing
-            return [];
-        }
-    },
-
-    /**
-     * Fetch app configuration (ads)
-     */
-    async fetchAppConfig() {
-        // Check cache first
-        const cached = CacheManager.getConfig();
-        if (cached) return cached;
-
-        try {
-            if (CONFIG.debug) {
-                console.log('🌐 Fetching app config from Appwrite...');
-            }
-
-            const response = await databases.listDocuments(
-                CONFIG.appwrite.databaseId,
-                CONFIG.appwrite.collections.appConfig,
-                [Appwrite.Query.limit(1)]
-            );
-
-            const config = response.documents[0] || null;
-            if (config) {
-                CacheManager.setConfig(config);
-                if (CONFIG.debug) {
-                    console.log('✅ App config loaded');
-                }
-            }
-            return config;
-        } catch (error) {
-            console.error('❌ Config fetch error:', error);
-            return null;
-        }
-    },
-
-    /**
-     * Test connection to Appwrite
-     */
-    async testConnection() {
-        try {
-            console.log('🔍 Testing Appwrite connection...');
+            this.movies = response.documents.map(doc => ({
+                id: doc.$id,
+                title: doc.title,
+                description: doc.description,
+                poster_url: doc.poster_url,
+                rating: doc.rating,
+                year: doc.year,
+                category: doc.category || 'action',
+                duration: doc.duration || '2h',
+                download_480p: doc.download_480p,
+                download_720p: doc.download_720p,
+                download_1080p: doc.download_1080p
+            }));
             
-            // Try to list documents (even if empty)
-            const response = await databases.listDocuments(
-                CONFIG.appwrite.databaseId,
-                CONFIG.appwrite.collections.movies,
-                [Appwrite.Query.limit(1)]
-            );
+            // Cache the movies
+            this.cacheMovies(this.movies);
             
-            console.log('✅ Connection successful!');
-            console.log('📊 Total movies in database:', response.total);
-            return true;
         } catch (error) {
-            console.error('❌ Connection test failed:', error);
-            console.error('');
-            console.error('🔧 TROUBLESHOOTING STEPS:');
-            console.error('1. Check if web platform is added in Appwrite Console');
-            console.error('2. Verify collection "movies" exists');
-            console.error('3. Check collection permissions (allow Any for Read)');
-            console.error('4. Verify Project ID and Database ID are correct');
-            console.error('');
-            return false;
+            console.error('Error fetching movies from Appwrite:', error);
+            throw error;
         }
     }
-};
 
-// ==================================================
-// UI COMPONENTS
-// ==================================================
-
-const UI = {
-    elements: {
-        movieGrid: document.getElementById('movieGrid'),
-        searchInput: document.getElementById('searchInput'),
-        clearSearch: document.getElementById('clearSearch'),
-        bannerAd: document.getElementById('bannerAd'),
-        detailView: document.getElementById('detailView'),
-        detailContent: document.getElementById('detailContent'),
-        backButton: document.getElementById('backButton'),
-        interstitialOverlay: document.getElementById('interstitialOverlay'),
-        interstitialImage: document.getElementById('interstitialImage'),
-        interstitialLink: document.getElementById('interstitialLink'),
-        interstitialClose: document.getElementById('interstitialClose'),
-        countdown: document.getElementById('countdown'),
-        pullIndicator: document.getElementById('pullIndicator'),
-        toastContainer: document.getElementById('toastContainer')
-    },
-
-    currentMovies: [],
-    appConfig: null,
-    pendingDownloadUrl: null,
-
-    /**
-     * Render loading skeletons
-     */
-    renderSkeletons(count = 12) {
-        let html = '';
-        for (let i = 0; i < count; i++) {
-            html += `<div class="movie-card skeleton skeleton-card"></div>`;
+    async loadAppConfig() {
+        try {
+            const response = await databases.listDocuments(
+                AppConfig.databaseId,
+                AppConfig.collections.appConfig,
+                [Appwrite.Query.limit(1)]
+            );
+            
+            if (response.documents.length > 0) {
+                this.appConfig = response.documents[0];
+                this.setupAds();
+                
+                // Store cache version
+                if (this.appConfig.cache_version) {
+                    localStorage.setItem(AppConfig.cacheKeys.cacheVersion, this.appConfig.cache_version);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading app config:', error);
         }
-        this.elements.movieGrid.innerHTML = html;
-    },
+    }
 
-    /**
-     * Render movie grid
-     */
-    renderMovies(movies) {
-        this.currentMovies = movies;
+    setupAds() {
+        if (!this.appConfig) return;
+        
+        // Banner Ad
+        if (this.appConfig.banner_image_url) {
+            this.bannerAdImage.src = this.appConfig.banner_image_url;
+            this.bannerAdLink.href = this.appConfig.banner_target_url || '#';
+            this.bannerAdContainer.classList.remove('hidden');
+        } else {
+            this.bannerAdContainer.classList.add('hidden');
+        }
+        
+        // Interstitial Ad
+        if (this.appConfig.interstitial_image_url) {
+            this.interstitialImage.src = this.appConfig.interstitial_image_url;
+            this.interstitialLink.href = this.appConfig.interstitial_target_url || '#';
+        }
+        
+        // Permanent Poster Ad
+        if (this.appConfig.poster_image_url) {
+            this.permanentPosterImage.src = this.appConfig.poster_image_url;
+            this.permanentPosterLink.href = this.appConfig.poster_target_url || '#';
+            this.permanentPosterAd.classList.remove('hidden');
+        } else {
+            this.permanentPosterAd.classList.add('hidden');
+        }
+    }
 
-        if (!movies || movies.length === 0) {
-            this.elements.movieGrid.innerHTML = `
-                <div class="empty-state" style="grid-column: 1 / -1;">
-                    <div class="empty-icon">🎬</div>
-                    <h3 class="empty-title">No movies found</h3>
-                    <p class="empty-message">Add movies from the Admin Panel or check your search</p>
-                    <button class="btn btn-primary" style="margin-top: 16px; max-width: 200px;" onclick="App.refreshData()">
-                        🔄 Refresh
-                    </button>
-                    <p style="margin-top: 16px; font-size: 0.8rem; color: var(--text-muted);">
-                        <a href="admin.html" style="color: var(--accent);">Open Admin Panel</a> to add movies
-                    </p>
-                </div>
-            `;
+    async refreshData() {
+        if (this.isRefreshing) return;
+        
+        this.isRefreshing = true;
+        this.refreshBtn.classList.add('spinning');
+        
+        try {
+            // Clear cache
+            localStorage.removeItem(AppConfig.cacheKeys.movies);
+            localStorage.removeItem(AppConfig.cacheKeys.moviesTimestamp);
+            
+            // Fetch fresh data
+            await this.fetchMoviesFromAppwrite();
+            await this.loadAppConfig();
+            
+            this.filteredMovies = [...this.movies];
+            this.renderMovies();
+            
+            this.showToast('Data refreshed successfully', 'success');
+            
+        } catch (error) {
+            console.error('Error refreshing data:', error);
+            this.showToast('Failed to refresh data', 'error');
+        } finally {
+            this.isRefreshing = false;
+            this.refreshBtn.classList.remove('spinning');
+        }
+    }
+
+    // ============================================
+    // SEARCH FUNCTIONALITY
+    // ============================================
+
+    handleSearch(query) {
+        query = query.toLowerCase().trim();
+        
+        if (query === '') {
+            this.clearSearchBtn.classList.add('hidden');
+            this.filteredMovies = [...this.movies];
+        } else {
+            this.clearSearchBtn.classList.remove('hidden');
+            this.filteredMovies = this.movies.filter(movie => 
+                movie.title.toLowerCase().includes(query) ||
+                (movie.description && movie.description.toLowerCase().includes(query))
+            );
+        }
+        
+        this.renderMovies();
+    }
+
+    clearSearch() {
+        this.searchInput.value = '';
+        this.clearSearchBtn.classList.add('hidden');
+        this.filteredMovies = [...this.movies];
+        this.renderMovies();
+    }
+
+    filterByCategory(category) {
+        this.categoryBtns.forEach(btn => btn.classList.remove('active'));
+        document.querySelector(`[data-category="${category}"]`).classList.add('active');
+        
+        if (category === 'all') {
+            this.filteredMovies = [...this.movies];
+        } else {
+            this.filteredMovies = this.movies.filter(movie => 
+                movie.category && movie.category.toLowerCase() === category.toLowerCase()
+            );
+        }
+        
+        this.renderMovies();
+    }
+
+    // ============================================
+    // RENDERING
+    // ============================================
+
+    renderMovies() {
+        if (this.filteredMovies.length === 0) {
+            this.movieGrid.innerHTML = '';
+            this.noResults.classList.remove('hidden');
             return;
         }
-
-        const html = movies.map(movie => `
-            <article class="movie-card" data-id="${movie.$id}" onclick="UI.openDetail('${movie.$id}')">
-                <img 
-                    src="${movie.poster_url || 'https://via.placeholder.com/300x450/1a1a1a/666?text=No+Poster'}" 
-                    alt="${movie.title}" 
-                    class="movie-poster loading"
-                    loading="lazy"
-                    onload="this.classList.remove('loading'); this.classList.add('loaded');"
-                    onerror="this.src='https://via.placeholder.com/300x450/1a1a1a/666?text=Error';"
-                >
-                ${movie.rating ? `
-                    <div class="movie-rating">
-                        ⭐ ${movie.rating}
+        
+        this.noResults.classList.add('hidden');
+        
+        this.movieGrid.innerHTML = this.filteredMovies.map(movie => `
+            <div class="movie-card" data-id="${movie.id}" onclick="app.showDetailView('${movie.id}')">
+                <div class="movie-poster">
+                    <img src="${movie.poster_url}" alt="${movie.title}" loading="lazy" 
+                         onerror="this.src='https://via.placeholder.com/300x450?text=No+Poster'">
+                    <div class="poster-rating">
+                        <i class="fas fa-star"></i>
+                        <span>${movie.rating || 'N/A'}</span>
                     </div>
-                ` : ''}
+                </div>
                 <div class="movie-info">
                     <h3 class="movie-title">${movie.title}</h3>
-                    ${movie.year ? `<p class="movie-year">${movie.year}</p>` : ''}
+                    <span class="movie-year">${movie.year || 'N/A'}</span>
                 </div>
-            </article>
+            </div>
         `).join('');
+    }
 
-        this.elements.movieGrid.innerHTML = html;
-    },
+    // ============================================
+    // DETAIL VIEW
+    // ============================================
 
-    /**
-     * Render banner ad
-     */
-    renderBannerAd(config) {
-        if (!config || !config.banner_image_url) {
-            this.elements.bannerAd.innerHTML = `
-                <div class="banner-placeholder">
-                    <p>📢 Advertisement Space</p>
-                    <p style="font-size: 0.8rem; margin-top: 8px; opacity: 0.7;">Configure ads in Admin Panel</p>
-                </div>
-            `;
+    showDetailView(movieId) {
+        this.currentMovie = this.movies.find(m => m.id === movieId);
+        
+        if (!this.currentMovie) {
+            this.showToast('Movie not found', 'error');
             return;
         }
-
-        this.elements.bannerAd.innerHTML = `
-            <a href="${config.banner_target_url || '#'}" target="_blank" rel="noopener sponsored">
-                <img 
-                    src="${config.banner_image_url}" 
-                    alt="Advertisement"
-                    onerror="this.parentElement.parentElement.innerHTML='<div class=\\'banner-placeholder\\'><p>Ad failed to load</p></div>';"
-                >
-            </a>
-        `;
-    },
-
-    /**
-     * Open movie detail view
-     */
-    openDetail(movieId) {
-        const movie = this.currentMovies.find(m => m.$id === movieId);
-        if (!movie) return;
-
-        // Render detail content
-        this.elements.detailContent.innerHTML = `
-            <div class="detail-poster-wrapper">
-                <img 
-                    src="${movie.poster_url || 'https://via.placeholder.com/400x600/1a1a1a/666?text=No+Poster'}" 
-                    alt="${movie.title}" 
-                    class="detail-poster"
-                    onerror="this.src='https://via.placeholder.com/400x600/1a1a1a/666?text=Error';"
-                >
-            </div>
-            <div class="detail-info">
-                <h1 class="detail-title">${movie.title}</h1>
-                <div class="detail-meta">
-                    ${movie.year ? `
-                        <span class="detail-year">
-                            📅 ${movie.year}
-                        </span>
-                    ` : ''}
-                    ${movie.rating ? `
-                        <span class="detail-rating">
-                            ⭐ ${movie.rating}/10
-                        </span>
-                    ` : ''}
-                </div>
-                ${movie.description ? `
-                    <p class="detail-description">${movie.description}</p>
-                ` : '<p class="detail-description" style="color: var(--text-muted);">No description available.</p>'}
-                <div class="download-section">
-                    <h3 class="download-title">⬇️ Download Links</h3>
-                    <div class="download-buttons">
-                        ${movie.download_480p ? `
-                            <button class="download-btn" onclick="UI.handleDownload('${movie.download_480p}')">
-                                <span>📥 480p</span>
-                                <span class="download-quality">SD Quality</span>
-                            </button>
-                        ` : ''}
-                        ${movie.download_720p ? `
-                            <button class="download-btn" onclick="UI.handleDownload('${movie.download_720p}')">
-                                <span>📥 720p</span>
-                                <span class="download-quality">HD Quality</span>
-                            </button>
-                        ` : ''}
-                        ${movie.download_1080p ? `
-                            <button class="download-btn" onclick="UI.handleDownload('${movie.download_1080p}')">
-                                <span>📥 1080p</span>
-                                <span class="download-quality">Full HD</span>
-                            </button>
-                        ` : ''}
-                        ${!movie.download_480p && !movie.download_720p && !movie.download_1080p ? `
-                            <p style="color: var(--text-muted); padding: 20px;">No download links available yet.</p>
-                        ` : ''}
-                    </div>
-                </div>
-            </div>
-        `;
-
-        // Show detail view with animation
-        this.elements.detailView.classList.add('active');
-        document.body.style.overflow = 'hidden';
         
-        // Add to browser history for back button support
-        history.pushState({ movie: movieId }, '', `#movie-${movieId}`);
-    },
-
-    /**
-     * Close movie detail view
-     */
-    closeDetail() {
-        this.elements.detailView.classList.remove('active');
-        document.body.style.overflow = '';
+        // Update URL without reloading
+        history.pushState({ movieId }, '', `#movie=${movieId}`);
         
-        // Update URL
-        if (window.location.hash) {
-            history.pushState({}, '', window.location.pathname);
-        }
-    },
-
-    /**
-     * Handle download button click
-     */
-    handleDownload(downloadUrl) {
-        this.pendingDownloadUrl = downloadUrl;
+        // Populate detail view
+        this.detailTitle.textContent = this.currentMovie.title;
+        this.detailPoster.src = this.currentMovie.poster_url;
+        this.detailRating.querySelector('span').textContent = this.currentMovie.rating || 'N/A';
+        this.detailYear.innerHTML = `<i class="fas fa-calendar"></i> ${this.currentMovie.year || 'N/A'}`;
+        this.detailDescription.textContent = this.currentMovie.description || 'No description available.';
         
-        // Check if interstitial ad is configured
-        if (this.appConfig && this.appConfig.interstitial_image_url) {
-            this.showInterstitialAd();
-        } else {
-            // No ad configured, proceed directly
-            this.proceedToDownload();
-        }
-    },
-
-    /**
-     * Show interstitial ad with countdown
-     */
-    showInterstitialAd() {
-        // Set ad content
-        this.elements.interstitialImage.src = this.appConfig.interstitial_image_url;
-        this.elements.interstitialLink.href = this.appConfig.interstitial_target_url || '#';
+        // Store download links
+        this.downloadLinks = {
+            '480p': this.currentMovie.download_480p,
+            '720p': this.currentMovie.download_720p,
+            '1080p': this.currentMovie.download_1080p
+        };
         
-        // Reset and show overlay
-        this.elements.interstitialClose.disabled = true;
-        this.elements.countdown.textContent = '5';
-        this.elements.interstitialOverlay.classList.add('active');
+        // Show detail view
+        this.homeView.classList.add('hidden');
+        this.detailView.classList.remove('hidden');
+        
+        // Scroll to top
+        window.scrollTo(0, 0);
+    }
 
-        // Start countdown
-        let count = 5;
-        const countdownInterval = setInterval(() => {
-            count--;
-            this.elements.countdown.textContent = count;
+    hideDetailView() {
+        this.detailView.classList.add('slide-out');
+        
+        setTimeout(() => {
+            this.detailView.classList.add('hidden');
+            this.detailView.classList.remove('slide-out');
+            this.homeView.classList.remove('hidden');
             
-            if (count <= 0) {
-                clearInterval(countdownInterval);
-                this.elements.interstitialClose.disabled = false;
-                this.elements.countdown.textContent = '✕';
+            // Update URL
+            history.pushState({}, '', window.location.pathname);
+        }, 300);
+    }
+
+    shareMovie() {
+        if (!this.currentMovie) return;
+        
+        if (navigator.share) {
+            navigator.share({
+                title: this.currentMovie.title,
+                text: `Check out ${this.currentMovie.title} on MovieFlix!`,
+                url: window.location.href
+            }).catch(err => console.log('Share failed:', err));
+        } else {
+            // Fallback: copy to clipboard
+            navigator.clipboard.writeText(window.location.href)
+                .then(() => this.showToast('Link copied to clipboard!', 'success'))
+                .catch(() => this.showToast('Failed to copy link', 'error'));
+        }
+    }
+
+    // ============================================
+    // DOWNLOAD & INTERSTITIAL AD
+    // ============================================
+
+    handleDownload(quality) {
+        const link = this.downloadLinks[quality];
+        
+        if (!link) {
+            this.showToast(`${quality} download not available`, 'warning');
+            return;
+        }
+        
+        // Store the quality for after ad closes
+        this.pendingDownloadQuality = quality;
+        
+        // Show interstitial ad
+        this.showInterstitialAd();
+    }
+
+    showInterstitialAd() {
+        // Check if interstitial is configured
+        if (!this.appConfig || !this.appConfig.interstitial_image_url) {
+            // No interstitial configured, proceed directly to download
+            this.proceedToDownload();
+            return;
+        }
+        
+        // Show overlay
+        this.interstitialOverlay.classList.remove('hidden');
+        
+        // Reset countdown
+        let countdown = 5;
+        this.countdownEl.textContent = countdown;
+        this.countdownEl.classList.remove('hidden');
+        this.closeIcon.classList.add('hidden');
+        this.closeInterstitialBtn.classList.add('disabled');
+        this.skipTimer.textContent = countdown;
+        
+        // Start countdown
+        const timer = setInterval(() => {
+            countdown--;
+            this.countdownEl.textContent = countdown;
+            this.skipTimer.textContent = countdown;
+            
+            if (countdown <= 0) {
+                clearInterval(timer);
+                this.countdownEl.classList.add('hidden');
+                this.closeIcon.classList.remove('hidden');
+                this.closeInterstitialBtn.classList.remove('disabled');
             }
         }, 1000);
-    },
+        
+        // Store timer reference for cleanup
+        this.countdownTimer = timer;
+    }
 
-    /**
-     * Close interstitial ad
-     */
-    closeInterstitialAd() {
-        this.elements.interstitialOverlay.classList.remove('active');
-        this.proceedToDownload();
-    },
-
-    /**
-     * Proceed to download after ad
-     */
-    proceedToDownload() {
-        if (this.pendingDownloadUrl) {
-            window.open(this.pendingDownloadUrl, '_blank');
-            this.pendingDownloadUrl = null;
+    closeInterstitial() {
+        if (this.closeInterstitialBtn.classList.contains('disabled')) {
+            return;
         }
-    },
+        
+        // Clear timer if still running
+        if (this.countdownTimer) {
+            clearInterval(this.countdownTimer);
+        }
+        
+        // Hide overlay
+        this.interstitialOverlay.classList.add('hidden');
+        
+        // Proceed to download
+        this.proceedToDownload();
+    }
 
-    /**
-     * Show toast notification
-     */
+    proceedToDownload() {
+        const quality = this.pendingDownloadQuality;
+        const link = this.downloadLinks[quality];
+        
+        if (link) {
+            // Open link in new tab
+            window.open(link, '_blank', 'noopener,noreferrer');
+            this.showToast(`Opening ${quality} download link...`, 'success');
+        }
+        
+        // Clear pending download
+        this.pendingDownloadQuality = null;
+    }
+
+    // ============================================
+    // PULL TO REFRESH
+    // ============================================
+
+    setupPullToRefresh() {
+        let startY = 0;
+        let pulling = false;
+        
+        document.addEventListener('touchstart', (e) => {
+            if (window.scrollY === 0) {
+                startY = e.touches[0].clientY;
+            }
+        }, { passive: true });
+        
+        document.addEventListener('touchmove', (e) => {
+            if (window.scrollY === 0 && e.touches[0].clientY > startY + 50) {
+                pulling = true;
+                this.pullRefresh.classList.add('visible');
+            }
+        }, { passive: true });
+        
+        document.addEventListener('touchend', () => {
+            if (pulling) {
+                pulling = false;
+                this.pullRefresh.classList.remove('visible');
+                this.refreshData();
+            }
+        });
+    }
+
+    // ============================================
+    // NETWORK LISTENER
+    // ============================================
+
+    setupNetworkListener() {
+        window.addEventListener('online', () => {
+            this.networkStatus.classList.add('hidden');
+            this.showToast('Back online', 'success');
+        });
+        
+        window.addEventListener('offline', () => {
+            this.networkStatus.classList.remove('hidden');
+            this.showToast('You are offline', 'warning');
+        });
+    }
+
+    // ============================================
+    // UI HELPERS
+    // ============================================
+
+    showSkeletonLoader() {
+        this.skeletonLoader.classList.remove('hidden');
+        this.movieGrid.classList.add('hidden');
+    }
+
+    hideSkeletonLoader() {
+        this.skeletonLoader.classList.add('hidden');
+        this.movieGrid.classList.remove('hidden');
+    }
+
+    hideSplashScreen() {
+        setTimeout(() => {
+            this.splashScreen.classList.add('fade-out');
+            this.appContainer.classList.remove('hidden');
+            
+            setTimeout(() => {
+                this.splashScreen.remove();
+            }, 500);
+        }, 2000);
+    }
+
     showToast(message, type = 'info') {
+        const icons = {
+            success: 'fa-check-circle',
+            error: 'fa-exclamation-circle',
+            warning: 'fa-exclamation-triangle',
+            info: 'fa-info-circle'
+        };
+        
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
-        toast.textContent = message;
+        toast.innerHTML = `
+            <i class="fas ${icons[type]}"></i>
+            <span>${message}</span>
+        `;
         
-        this.elements.toastContainer.appendChild(toast);
-
+        this.toastContainer.appendChild(toast);
+        
+        // Remove toast after 3 seconds
         setTimeout(() => {
-            toast.style.opacity = '0';
+            toast.classList.add('toast-out');
             setTimeout(() => toast.remove(), 300);
         }, 3000);
     }
-};
+}
 
-// ==================================================
-// SEARCH FUNCTIONALITY
-// ==================================================
-
-const Search = {
-    debounceTimeout: null,
-
-    /**
-     * Initialize search handlers
-     */
-    init() {
-        UI.elements.searchInput.addEventListener('input', (e) => {
-            this.handleSearch(e.target.value);
-        });
-
-        UI.elements.clearSearch.addEventListener('click', () => {
-            UI.elements.searchInput.value = '';
-            UI.elements.clearSearch.classList.remove('visible');
-            UI.renderMovies(UI.currentMovies);
-        });
-    },
-
-    /**
-     * Handle search with debounce
-     */
-    handleSearch(query) {
-        // Toggle clear button visibility
-        UI.elements.clearSearch.classList.toggle('visible', query.length > 0);
-
-        // Debounce search
-        clearTimeout(this.debounceTimeout);
-        this.debounceTimeout = setTimeout(() => {
-            this.performSearch(query);
-        }, 300);
-    },
-
-    /**
-     * Perform search on cached movies
-     */
-    performSearch(query) {
-        const allMovies = CacheManager.getMovies() || UI.currentMovies || [];
-        
-        if (!query.trim()) {
-            UI.renderMovies(allMovies);
-            return;
-        }
-
-        const searchTerm = query.toLowerCase().trim();
-        const filtered = allMovies.filter(movie => {
-            return (
-                movie.title?.toLowerCase().includes(searchTerm) ||
-                movie.description?.toLowerCase().includes(searchTerm) ||
-                movie.year?.toString().includes(searchTerm)
-            );
-        });
-
-        UI.renderMovies(filtered);
-    }
-};
-
-// ==================================================
-// PULL TO REFRESH
-// ==================================================
-
-const PullToRefresh = {
-    startY: 0,
-    isPulling: false,
-
-    init() {
-        let pullDistance = 0;
-
-        document.addEventListener('touchstart', (e) => {
-            if (window.scrollY === 0 && !UI.elements.detailView.classList.contains('active')) {
-                this.startY = e.touches[0].pageY;
-                this.isPulling = true;
-            }
-        }, { passive: true });
-
-        document.addEventListener('touchmove', (e) => {
-            if (!this.isPulling) return;
-
-            const currentY = e.touches[0].pageY;
-            pullDistance = currentY - this.startY;
-
-            if (pullDistance > 80 && window.scrollY === 0) {
-                UI.elements.pullIndicator.classList.add('visible');
-            } else {
-                UI.elements.pullIndicator.classList.remove('visible');
-            }
-        }, { passive: true });
-
-        document.addEventListener('touchend', async () => {
-            if (UI.elements.pullIndicator.classList.contains('visible')) {
-                UI.elements.pullIndicator.classList.remove('visible');
-                await App.refreshData();
-            }
-            this.isPulling = false;
-            pullDistance = 0;
-        });
-    }
-};
-
-// ==================================================
-// MAIN APP CONTROLLER
-// ==================================================
-
-const App = {
-    /**
-     * Initialize the application
-     */
-    async init() {
-        console.log('🚀 MovieFlix initializing...');
-
-        // Initialize components
-        Search.init();
-        PullToRefresh.init();
-        this.setupEventListeners();
-
-        // Test connection first
-        const isConnected = await ApiService.testConnection();
-        
-        if (!isConnected) {
-            UI.elements.movieGrid.innerHTML = `
-                <div class="empty-state" style="grid-column: 1 / -1;">
-                    <div class="empty-icon">⚠️</div>
-                    <h3 class="empty-title">Connection Error</h3>
-                    <p class="empty-message">Could not connect to database. Please check:</p>
-                    <ul style="text-align: left; margin: 16px auto; max-width: 300px; color: var(--text-secondary); font-size: 0.9rem;">
-                        <li>Web platform is added in Appwrite</li>
-                        <li>Collections exist with correct IDs</li>
-                        <li>Permissions are set to "Any" for Read</li>
-                    </ul>
-                    <button class="btn btn-primary" style="margin-top: 16px; max-width: 200px;" onclick="location.reload()">
-                        🔄 Retry
-                    </button>
-                    <p style="margin-top: 20px; font-size: 0.8rem; color: var(--text-muted);">
-                        Check browser console for details (F12)
-                    </p>
-                </div>
-            `;
-            UI.renderBannerAd(null);
-        } else {
-            // Load data
-            await this.loadData();
-        }
-
-        console.log('✅ MovieFlix ready!');
-    },
-
-    /**
-     * Setup event listeners
-     */
-    setupEventListeners() {
-        // Back button
-        UI.elements.backButton.addEventListener('click', () => {
-            UI.closeDetail();
-        });
-
-        // Interstitial close button
-        UI.elements.interstitialClose.addEventListener('click', () => {
-            if (!UI.elements.interstitialClose.disabled) {
-                UI.closeInterstitialAd();
-            }
-        });
-
-        // Handle browser back button
-        window.addEventListener('popstate', () => {
-            if (UI.elements.detailView.classList.contains('active')) {
-                UI.closeDetail();
-            }
-        });
-
-        // Handle escape key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                if (UI.elements.interstitialOverlay.classList.contains('active')) {
-                    if (!UI.elements.interstitialClose.disabled) {
-                        UI.closeInterstitialAd();
-                    }
-                } else if (UI.elements.detailView.classList.contains('active')) {
-                    UI.closeDetail();
-                }
-            }
-        });
-    },
-
-    /**
-     * Load all data
-     */
-    async loadData() {
-        UI.renderSkeletons();
-
-        try {
-            // Load movies and config in parallel
-            const [movies, config] = await Promise.all([
-                ApiService.fetchMovies(),
-                ApiService.fetchAppConfig()
-            ]);
-
-            UI.appConfig = config;
-            UI.renderMovies(movies);
-            UI.renderBannerAd(config);
-
-            // Show cache status
-            const cacheTime = CacheManager.getCacheTimeRemaining();
-            if (cacheTime > 0) {
-                const minutes = Math.round(cacheTime / 60000);
-                console.log(`📦 Cache valid for ${minutes} more minutes`);
-            }
-        } catch (error) {
-            console.error('Failed to load data:', error);
-            UI.elements.movieGrid.innerHTML = `
-                <div class="empty-state" style="grid-column: 1 / -1;">
-                    <div class="empty-icon">😵</div>
-                    <h3 class="empty-title">Failed to load movies</h3>
-                    <p class="empty-message">Please check your connection and try again</p>
-                    <button class="btn btn-primary" style="margin-top: 16px; max-width: 200px;" onclick="App.refreshData()">
-                        🔄 Retry
-                    </button>
-                </div>
-            `;
-        }
-    },
-
-    /**
-     * Force refresh data
-     */
-    async refreshData() {
-        UI.showToast('🔄 Refreshing...', 'info');
-        CacheManager.clearMovies();
-        localStorage.removeItem(CONFIG.cache.configKey);
-        await this.loadData();
-        UI.showToast('✅ Content updated!', 'success');
-    }
-};
-
-// ==================================================
-// INITIALIZE APP ON LOAD
-// ==================================================
-
+// Initialize app when DOM is ready
+let app;
 document.addEventListener('DOMContentLoaded', () => {
-    App.init();
+    app = new MovieApp();
+});
+
+// Handle hash navigation on page load
+window.addEventListener('load', () => {
+    const hash = window.location.hash;
+    if (hash.startsWith('#movie=')) {
+        const movieId = hash.replace('#movie=', '');
+        setTimeout(() => {
+            if (app) {
+                app.showDetailView(movieId);
+            }
+        }, 2500);
+    }
 });
