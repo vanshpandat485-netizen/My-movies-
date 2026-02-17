@@ -1,41 +1,31 @@
-// ==================================================
-// APPWRITE CONFIGURATION - UPDATED
-// ==================================================
+// js/config.js - Appwrite Configuration
 
-const CONFIG = {
-  // Appwrite Settings
-  appwrite: {
-    endpoint: 'https://cloud.appwrite.io/v1',
-    projectId: '69921d010019e2d80f37',
-    databaseId: '69926a04003e2dda63d6',
-    collections: {
-      movies: 'movies',
-      appConfig: 'app_config'
-    }
+const AppConfig = {
+  endpoint: 'https://cloud.appwrite.io/v1',
+  projectId: '69921d010019e2d80f37',
+  databaseId: '69926a04003e2dda63d6',
+  collections: {
+    movies: 'movies',
+    appConfig: 'app_config'
   },
-  
-  // Cache Settings
-  cache: {
-    moviesKey: 'movies_cache',
-    configKey: 'app_config_cache',
-    duration: 3 * 60 * 60 * 1000, // 3 hours in milliseconds
-    versionKey: 'cache_version'
+  cacheKeys: {
+    movies: 'movies_cache',
+    moviesTimestamp: 'movies_cache_timestamp',
+    appConfig: 'app_config_cache',
+    cacheVersion: 'cache_version'
   },
-  
-  // Admin Settings
-  admin: {
-    password: 'admin@123', // Change this in production
-    sessionKey: 'admin_session'
-  },
-  
-  // Ad Settings
-  ads: {
-    interstitialDelay: 5000 // 5 seconds countdown
-  },
-  
-  // Debug Mode
-  debug: false
+  cacheDuration: 3 * 60 * 60 * 1000, // 3 hours in milliseconds
+  adminPassword: 'admin123' // Change this in production
 };
 
-// Freeze config to prevent modifications
-Object.freeze(CONFIG);
+// Initialize Appwrite SDK
+const client = new Appwrite.Client();
+client
+  .setEndpoint(AppConfig.endpoint)
+  .setProject(AppConfig.projectId);
+
+const databases = new Appwrite.Databases(client);
+
+// Export for use in other files
+window.AppConfig = AppConfig;
+window.databases = databases;
