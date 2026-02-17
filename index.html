@@ -4,93 +4,208 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#121212">
-    <meta name="description" content="Stream and download your favorite movies in HD quality">
-    <title>MovieFlix - Watch & Download HD Movies</title>
-    <link rel="stylesheet" href="css/style.css">
-    <!-- Appwrite SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/appwrite@14.0.0"></script>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>MovieFlix - Stream & Download</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-    <!-- Pull to Refresh Indicator -->
-    <div id="pullIndicator" class="pull-indicator">
-        🔄 Release to refresh...
-    </div>
-
-    <!-- Main App Container -->
-    <div class="app-container">
-        <!-- Sticky Header -->
-        <header class="header">
-            <div class="header-content">
-                <a href="#" class="logo">
-                    <span class="logo-icon">🎬</span>
-                    <span>MovieFlix</span>
-                </a>
-                <div class="search-container">
-                    <div class="search-wrapper">
-                        <input 
-                            type="text" 
-                            id="searchInput" 
-                            class="search-input" 
-                            placeholder="Search movies..."
-                            autocomplete="off"
-                        >
-                        <button id="clearSearch" class="clear-search">✕</button>
-                        <span class="search-icon">🔍</span>
-                    </div>
-                </div>
+    <!-- Splash Screen -->
+    <div id="splash-screen" class="splash-screen">
+        <div class="splash-content">
+            <div class="logo-animation">
+                <i class="fas fa-film"></i>
             </div>
-        </header>
-
-        <!-- Banner Ad Section -->
-        <section id="bannerAd" class="banner-ad">
-            <div class="banner-placeholder">
-                <p>Loading advertisement...</p>
+            <h1>MovieFlix</h1>
+            <div class="loading-bar">
+                <div class="loading-progress"></div>
             </div>
-        </section>
-
-        <!-- Movies Section -->
-        <main>
-            <h2 class="section-title">Trending Movies</h2>
-            <div id="movieGrid" class="movie-grid">
-                <!-- Movie cards will be loaded here -->
-                <div class="loading-spinner">
-                    <div class="spinner"></div>
-                    <p class="loading-text">Loading movies...</p>
-                </div>
-            </div>
-        </main>
-    </div>
-
-    <!-- Movie Detail View (SPA Style) -->
-    <div id="detailView" class="detail-view">
-        <header class="detail-header">
-            <button id="backButton" class="back-button">
-                <span>←</span>
-                <span>Back</span>
-            </button>
-        </header>
-        <div id="detailContent" class="detail-content">
-            <!-- Detail content loaded dynamically -->
         </div>
     </div>
 
-    <!-- Interstitial Ad Overlay -->
-    <div id="interstitialOverlay" class="interstitial-overlay">
-        <div class="interstitial-content">
-            <span class="interstitial-label">Advertisement</span>
-            <button id="interstitialClose" class="interstitial-close" disabled>
-                <span id="countdown" class="interstitial-countdown">5</span>
-            </button>
-            <a id="interstitialLink" href="#" target="_blank" rel="noopener">
-                <img id="interstitialImage" class="interstitial-image" src="" alt="Advertisement">
+    <!-- Main App Container -->
+    <div id="app-container" class="app-container hidden">
+        <!-- Header with Sticky Search -->
+        <header class="sticky-header">
+            <div class="header-top">
+                <div class="logo">
+                    <i class="fas fa-film"></i>
+                    <span>MovieFlix</span>
+                </div>
+                <button class="refresh-btn" id="refresh-btn" title="Refresh">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+            <div class="search-container">
+                <i class="fas fa-search search-icon"></i>
+                <input type="text" id="search-input" placeholder="Search movies..." autocomplete="off">
+                <button class="clear-search hidden" id="clear-search">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Home View -->
+        <main id="home-view" class="main-content">
+            <!-- Banner Ad Section -->
+            <section class="banner-ad-container" id="banner-ad-container">
+                <a href="#" id="banner-ad-link" target="_blank" rel="noopener">
+                    <img id="banner-ad-image" src="" alt="Advertisement">
+                    <span class="ad-label">AD</span>
+                </a>
+            </section>
+
+            <!-- Categories Filter -->
+            <section class="categories-section">
+                <div class="categories-scroll">
+                    <button class="category-btn active" data-category="all">All</button>
+                    <button class="category-btn" data-category="action">Action</button>
+                    <button class="category-btn" data-category="drama">Drama</button>
+                    <button class="category-btn" data-category="comedy">Comedy</button>
+                    <button class="category-btn" data-category="horror">Horror</button>
+                    <button class="category-btn" data-category="sci-fi">Sci-Fi</button>
+                </div>
+            </section>
+
+            <!-- Movie Grid -->
+            <section class="movies-section">
+                <h2 class="section-title">
+                    <i class="fas fa-fire"></i> Trending Movies
+                </h2>
+                <div class="movie-grid" id="movie-grid">
+                    <!-- Movies will be loaded here dynamically -->
+                </div>
+                <div class="no-results hidden" id="no-results">
+                    <i class="fas fa-search"></i>
+                    <p>No movies found</p>
+                </div>
+            </section>
+
+            <!-- Loading Skeleton -->
+            <div class="skeleton-loader hidden" id="skeleton-loader">
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+            </div>
+        </main>
+
+        <!-- Movie Detail View -->
+        <div id="detail-view" class="detail-view hidden">
+            <div class="detail-header">
+                <button class="back-btn" id="back-btn">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                <h2 id="detail-title">Movie Title</h2>
+                <button class="share-btn" id="share-btn">
+                    <i class="fas fa-share-alt"></i>
+                </button>
+            </div>
+            
+            <div class="detail-content">
+                <div class="detail-poster-container">
+                    <img id="detail-poster" src="" alt="Movie Poster">
+                    <div class="poster-overlay">
+                        <div class="rating-badge" id="detail-rating">
+                            <i class="fas fa-star"></i>
+                            <span>8.5</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="detail-info">
+                    <div class="movie-meta">
+                        <span class="year" id="detail-year">
+                            <i class="fas fa-calendar"></i> 2024
+                        </span>
+                        <span class="quality">
+                            <i class="fas fa-hd"></i> HD
+                        </span>
+                        <span class="duration">
+                            <i class="fas fa-clock"></i> 2h 15m
+                        </span>
+                    </div>
+
+                    <div class="description-section">
+                        <h3>Story</h3>
+                        <p id="detail-description">Movie description will appear here...</p>
+                    </div>
+
+                    <div class="download-section">
+                        <h3><i class="fas fa-download"></i> Download Links</h3>
+                        <p class="download-notice">Click to get download link</p>
+                        <div class="download-buttons">
+                            <button class="download-btn btn-480p" id="btn-480p" data-quality="480p">
+                                <i class="fas fa-download"></i>
+                                <span>480p</span>
+                                <small>Low Size</small>
+                            </button>
+                            <button class="download-btn btn-720p" id="btn-720p" data-quality="720p">
+                                <i class="fas fa-download"></i>
+                                <span>720p</span>
+                                <small>HD</small>
+                            </button>
+                            <button class="download-btn btn-1080p" id="btn-1080p" data-quality="1080p">
+                                <i class="fas fa-download"></i>
+                                <span>1080p</span>
+                                <small>Full HD</small>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Permanent Footer Poster Ad -->
+        <div class="permanent-poster-ad" id="permanent-poster-ad">
+            <a href="#" id="permanent-poster-link" target="_blank" rel="noopener">
+                <img id="permanent-poster-image" src="" alt="Special Offer">
+                <span class="ad-badge">Sponsored</span>
             </a>
         </div>
     </div>
 
-    <!-- Toast Container -->
-    <div id="toastContainer" class="toast-container"></div>
+    <!-- Interstitial Ad Overlay -->
+    <div id="interstitial-overlay" class="interstitial-overlay hidden">
+        <div class="interstitial-content">
+            <div class="interstitial-header">
+                <span class="ad-notice">Advertisement</span>
+                <button class="close-interstitial disabled" id="close-interstitial">
+                    <span class="countdown" id="countdown">5</span>
+                    <i class="fas fa-times hidden" id="close-icon"></i>
+                </button>
+            </div>
+            <a href="#" id="interstitial-link" target="_blank" rel="noopener">
+                <img id="interstitial-image" src="" alt="Advertisement">
+            </a>
+            <p class="skip-notice">Wait <span id="skip-timer">5</span> seconds to continue</p>
+        </div>
+    </div>
+
+    <!-- Pull to Refresh Indicator -->
+    <div class="pull-to-refresh" id="pull-refresh">
+        <div class="pull-icon">
+            <i class="fas fa-arrow-down"></i>
+        </div>
+        <span>Pull to refresh</span>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Network Status -->
+    <div class="network-status hidden" id="network-status">
+        <i class="fas fa-wifi-slash"></i>
+        <span>No Internet Connection</span>
+    </div>
 
     <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.0"></script>
     <script src="js/config.js"></script>
     <script src="js/script.js"></script>
 </body>
