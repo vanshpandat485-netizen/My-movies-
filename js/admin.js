@@ -1,672 +1,751 @@
-// ==================================================
-// MOVIEFLIX - ADMIN PANEL SCRIPT
-// ==================================================
+// js/admin.js - Admin Panel Logic
 
-// Appwrite Client Initialization
-const client = new Appwrite.Client();
-const databases = new Appwrite.Databases(client);
-
-client
-    .setEndpoint(CONFIG.appwrite.endpoint)
-    .setProject(CONFIG.appwrite.projectId);
-
-// ==================================================
-// ADMIN STATE
-// ==================================================
-
-const AdminState = {
-    isLoggedIn: false,
-    movies: [],
-    appConfig: null,
-    configDocId: null
-};
-
-// ==================================================
-// DOM ELEMENTS
-// ==================================================
-
-const Elements = {
-    // Auth
-    loginScreen: document.getElementById('loginScreen'),
-    loginForm: document.getElementById('loginForm'),
-    passwordInput: document.getElementById('password'),
-    
-    // Dashboard
-    adminDashboard: document.getElementById('adminDashboard'),
-    logoutBtn: document.getElementById('logoutBtn'),
-    refreshCacheBtn: document.getElementById('refreshCacheBtn'),
-    
-    // Stats
-    totalMovies: document.getElementById('totalMovies'),
-    cacheStatus: document.getElementById('cacheStatus'),
-    lastUpdated: document.getElementById('lastUpdated'),
-    
-    // Tabs
-    tabButtons: document.querySelectorAll('.tab-btn'),
-    moviesTab: document.getElementById('moviesTab'),
-    adsTab: document.getElementById('adsTab'),
-    
-    // Movies
-    addMovieForm: document.getElementById('addMovieForm'),
-    moviesTableBody: document.getElementById('moviesTableBody'),
-    
-    // Edit Modal
-    editModal: document.getElementById('editModal'),
-    editMovieForm: document.getElementById('editMovieForm'),
-    closeEditModal: document.getElementById('closeEditModal'),
-    cancelEditBtn: document.getElementById('cancelEditBtn'),
-    
-    // Ads
-    bannerAdForm: document.getElementById('bannerAdForm'),
-    bannerImageUrl: document.getElementById('bannerImageUrl'),
-    bannerTargetUrl: document.getElementById('bannerTargetUrl'),
-    bannerPreview: document.getElementById('bannerPreview'),
-    bannerNoPreview: document.getElementById('bannerNoPreview'),
-    
-    interstitialAdForm: document.getElementById('interstitialAdForm'),
-    interstitialImageUrl: document.getElementById('interstitialImageUrl'),
-    interstitialTargetUrl: document.getElementById('interstitialTargetUrl'),
-    interstitialPreview: document.getElementById('interstitialPreview'),
-    interstitialNoPreview: document.getElementById('interstitialNoPreview'),
-    
-    // Toast
-    toastContainer: document.getElementById('toastContainer')
-};
-
-// ==================================================
-// UTILITY FUNCTIONS
-// ==================================================
-
-/**
- * Show toast notification
- */
-function showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-    
-    Elements.toastContainer.appendChild(toast);
-
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
-}
-
-/**
- * Format date for display
- */
-function formatDate(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-}
-
-// ==================================================
-// AUTHENTICATION
-// ==================================================
-
-const Auth = {
-    /**
-     * Check if user is logged in
-     */
-    checkSession() {
-        const session = sessionStorage.getItem(CONFIG.admin.sessionKey);
-        return session === 'active';
-    },
-
-    /**
-     * Handle login
-     */
-    login(password) {
-        if (password === CONFIG.admin.password) {
-            sessionStorage.setItem(CONFIG.admin.sessionKey, 'active');
-            AdminState.isLoggedIn = true;
-            this.showDashboard();
-            return true;
-        }
-        return false;
-    },
-
-    /**
-     * Handle logout
-     */
-    logout() {
-        sessionStorage.removeItem(CONFIG.admin.sessionKey);
-        AdminState.isLoggedIn = false;
-        Elements.adminDashboard.classList.remove('active');
-        Elements.loginScreen.style.display = 'flex';
-        Elements.passwordInput.value = '';
-    },
-
-    /**
-     * Show dashboard after login
-     */
-    showDashboard() {
-        Elements.loginScreen.style.display = 'none';
-        Elements.adminDashboard.classList.add('active');
-        Dashboard.init();
+class AdminPanel {
+    constructor() {
+        this.isLoggedIn = false;
+        this.movies = [];
+        this.appConfig = null;
+        this.editingMovieId = null;
+        
+        this.init();
     }
-};
 
-// ==================================================
-// DASHBOARD
-// ==================================================
+    init() {
+        this.bindElements();
+        this.bindEvents();
+        this.checkLoginState();
+    }
 
-const Dashboard = {
-    /**
-     * Initialize dashboard
-     */
-    async init() {
-        await Promise.all([
-            this.loadMovies(),
-            this.loadAppConfig()
-        ]);
-        this.updateStats();
-    },
+    bindElements() {
+        // Login
+        this.loginScreen = document.getElementById('login-screen');
+        this.loginForm = document.getElementById('login-form');
+        this.passwordInput = document.getElementById('admin-password');
+        this.togglePasswordBtn = document.getElementById('toggle-password');
+        this.loginError = document.getElementById('login-error');
+        
+        // Dashboard
+        this.adminDashboard = document.getElementById('admin-dashboard');
+        this.sidebar = document.querySelector('.admin-sidebar');
+        this.navItems = document.querySelectorAll('.nav-item');
+        this.sections = document.querySelectorAll('.admin-section');
+        this.pageTitle = document.getElementById('page-title');
+        
+        // Mobile
+        this.menuToggle = document.getElementById('menu-toggle');
+        this.logoutBtn = document.getElementById('logout-btn');
+        this.logoutMobile = document.getElementById('logout-mobile');
+        
+        // Dashboard stats
+        this.totalMovies = document.getElementById('total-movies');
+        this.recentMoviesList = document.getElementById('recent-movies-list');
+        
+        // Quick actions
+        this.quickAddMovie = document.getElementById('quick-add-movie');
+        this.quickRefreshCache = document.getElementById('quick-refresh-cache');
+        this.quickViewSite = document.getElementById('quick-view-site');
+        
+        // Movies table
+        this.moviesTableBody = document.getElementById('movies-table-body');
+        this.movieSearch = document.getElementById('movie-search');
+        this.addMovieBtn = document.getElementById('add-movie-btn');
+        this.tableEmpty = document.getElementById('table-empty');
+        
+        // Movie form
+        this.movieForm = document.getElementById('movie-form');
+        this.formHeading = document.getElementById('form-heading');
+        this.movieIdInput = document.getElementById('movie-id');
+        this.submitText = document.getElementById('submit-text');
+        this.cancelFormBtn = document.getElementById('cancel-form');
+        this.posterPreview = document.getElementById('preview-image');
+        
+        // Ad forms
+        this.bannerAdForm = document.getElementById('banner-ad-form');
+        this.interstitialAdForm = document.getElementById('interstitial-ad-form');
+        this.posterAdForm = document.getElementById('poster-ad-form');
+        
+        // Settings
+        this.refreshCacheBtn = document.getElementById('refresh-cache-btn');
+        this.currentCacheVersion = document.getElementById('current-cache-version');
+        this.passwordForm = document.getElementById('password-form');
+        
+        // Modals
+        this.editModal = document.getElementById('edit-modal');
+        this.deleteModal = document.getElementById('delete-modal');
+        this.closeModalBtn = document.getElementById('close-modal');
+        this.deleteMovieTitle = document.getElementById('delete-movie-title');
+        this.cancelDeleteBtn = document.getElementById('cancel-delete');
+        this.confirmDeleteBtn = document.getElementById('confirm-delete');
+        
+        // Loading & Toast
+        this.loadingOverlay = document.getElementById('loading-overlay');
+        this.toastContainer = document.getElementById('toast-container');
+    }
 
-    /**
-     * Load movies from Appwrite
-     */
+    bindEvents() {
+        // Login
+        this.loginForm.addEventListener('submit', (e) => this.handleLogin(e));
+        this.togglePasswordBtn.addEventListener('click', () => this.togglePasswordVisibility());
+        
+        // Navigation
+        this.navItems.forEach(item => {
+            item.addEventListener('click', () => this.switchSection(item.dataset.section));
+        });
+        
+        // Mobile menu
+        this.menuToggle.addEventListener('click', () => this.toggleSidebar());
+        
+        // Logout
+        this.logoutBtn.addEventListener('click', () => this.handleLogout());
+        this.logoutMobile.addEventListener('click', () => this.handleLogout());
+        
+        // Quick actions
+        this.quickAddMovie.addEventListener('click', () => this.switchSection('add-movie'));
+        this.quickRefreshCache.addEventListener('click', () => this.refreshCache());
+        this.quickViewSite.addEventListener('click', () => window.open('index.html', '_blank'));
+        
+        // Movies
+        this.addMovieBtn.addEventListener('click', () => this.switchSection('add-movie'));
+        this.movieSearch.addEventListener('input', (e) => this.searchMovies(e.target.value));
+        this.movieForm.addEventListener('submit', (e) => this.handleMovieSubmit(e));
+        this.cancelFormBtn.addEventListener('click', () => this.resetForm());
+        
+        // Poster preview
+        document.getElementById('movie-poster').addEventListener('input', (e) => {
+            this.updatePosterPreview(e.target.value);
+        });
+        
+        // Ad forms
+        this.bannerAdForm.addEventListener('submit', (e) => this.saveBannerAd(e));
+        this.interstitialAdForm.addEventListener('submit', (e) => this.saveInterstitialAd(e));
+        this.posterAdForm.addEventListener('submit', (e) => this.savePosterAd(e));
+        
+        // Ad previews
+        document.getElementById('banner-image-url').addEventListener('input', (e) => {
+            this.updateAdPreview('banner-preview', e.target.value);
+        });
+        document.getElementById('interstitial-image-url').addEventListener('input', (e) => {
+            this.updateAdPreview('interstitial-preview', e.target.value);
+        });
+        document.getElementById('poster-image-url').addEventListener('input', (e) => {
+            this.updateAdPreview('poster-ad-preview', e.target.value);
+        });
+        
+        // Settings
+        this.refreshCacheBtn.addEventListener('click', () => this.refreshCache());
+        this.passwordForm.addEventListener('submit', (e) => this.changePassword(e));
+        
+        // Modal
+        this.closeModalBtn.addEventListener('click', () => this.closeModal());
+        this.cancelDeleteBtn.addEventListener('click', () => this.closeDeleteModal());
+        this.confirmDeleteBtn.addEventListener('click', () => this.confirmDelete());
+        
+        // Close sidebar on outside click (mobile)
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 768 && 
+                this.sidebar.classList.contains('open') && 
+                !this.sidebar.contains(e.target) && 
+                e.target !== this.menuToggle) {
+                this.sidebar.classList.remove('open');
+            }
+        });
+    }
+
+    // ============================================
+    // AUTHENTICATION
+    // ============================================
+
+    checkLoginState() {
+        const isLoggedIn = sessionStorage.getItem('admin_logged_in') === 'true';
+        if (isLoggedIn) {
+            this.showDashboard();
+        }
+    }
+
+    handleLogin(e) {
+        e.preventDefault();
+        
+        const password = this.passwordInput.value;
+        
+        if (password === AppConfig.adminPassword) {
+            sessionStorage.setItem('admin_logged_in', 'true');
+            this.loginError.classList.add('hidden');
+            this.showDashboard();
+        } else {
+            this.loginError.classList.remove('hidden');
+            this.passwordInput.value = '';
+            this.passwordInput.focus();
+        }
+    }
+
+    handleLogout() {
+        sessionStorage.removeItem('admin_logged_in');
+        this.adminDashboard.classList.add('hidden');
+        this.loginScreen.classList.remove('hidden');
+        this.passwordInput.value = '';
+    }
+
+    togglePasswordVisibility() {
+        const type = this.passwordInput.type === 'password' ? 'text' : 'password';
+        this.passwordInput.type = type;
+        this.togglePasswordBtn.innerHTML = type === 'password' 
+            ? '<i class="fas fa-eye"></i>' 
+            : '<i class="fas fa-eye-slash"></i>';
+    }
+
+    async showDashboard() {
+        this.loginScreen.classList.add('hidden');
+        this.adminDashboard.classList.remove('hidden');
+        
+        // Load data
+        await this.loadMovies();
+        await this.loadAppConfig();
+        this.updateDashboardStats();
+    }
+
+    // ============================================
+    // DATA LOADING
+    // ============================================
+
     async loadMovies() {
         try {
+            this.showLoading();
+            
             const response = await databases.listDocuments(
-                CONFIG.appwrite.databaseId,
-                CONFIG.appwrite.collections.movies,
+                AppConfig.databaseId,
+                AppConfig.collections.movies,
                 [
                     Appwrite.Query.orderDesc('$createdAt'),
                     Appwrite.Query.limit(100)
                 ]
             );
             
-            AdminState.movies = response.documents;
+            this.movies = response.documents;
             this.renderMoviesTable();
+            this.renderRecentMovies();
+            
         } catch (error) {
-            console.error('Failed to load movies:', error);
-            showToast('Failed to load movies', 'error');
+            console.error('Error loading movies:', error);
+            this.showToast('Failed to load movies', 'error');
+        } finally {
+            this.hideLoading();
         }
-    },
+    }
 
-    /**
-     * Load app configuration
-     */
     async loadAppConfig() {
         try {
             const response = await databases.listDocuments(
-                CONFIG.appwrite.databaseId,
-                CONFIG.appwrite.collections.appConfig,
+                AppConfig.databaseId,
+                AppConfig.collections.appConfig,
                 [Appwrite.Query.limit(1)]
             );
             
             if (response.documents.length > 0) {
-                AdminState.appConfig = response.documents[0];
-                AdminState.configDocId = response.documents[0].$id;
+                this.appConfig = response.documents[0];
                 this.populateAdForms();
+                this.currentCacheVersion.textContent = this.appConfig.cache_version || '1';
+            } else {
+                // Create default config
+                await this.createDefaultConfig();
             }
+            
         } catch (error) {
-            console.error('Failed to load config:', error);
+            console.error('Error loading app config:', error);
         }
-    },
+    }
 
-    /**
-     * Update statistics display
-     */
-    updateStats() {
-        Elements.totalMovies.textContent = AdminState.movies.length;
-        Elements.cacheStatus.textContent = 'Active';
+    async createDefaultConfig() {
+        try {
+            const response = await databases.createDocument(
+                AppConfig.databaseId,
+                AppConfig.collections.appConfig,
+                'unique()',
+                {
+                    banner_image_url: '',
+                    banner_target_url: '',
+                    interstitial_image_url: '',
+                    interstitial_target_url: '',
+                    poster_image_url: '',
+                    poster_target_url: '',
+                    cache_version: '1'
+                }
+            );
+            
+            this.appConfig = response;
+            
+        } catch (error) {
+            console.error('Error creating default config:', error);
+        }
+    }
+
+    populateAdForms() {
+        if (!this.appConfig) return;
         
-        if (AdminState.movies.length > 0) {
-            const lastMovie = AdminState.movies[0];
-            Elements.lastUpdated.textContent = formatDate(lastMovie.$createdAt);
-        }
-    },
+        // Banner Ad
+        document.getElementById('banner-image-url').value = this.appConfig.banner_image_url || '';
+        document.getElementById('banner-target-url').value = this.appConfig.banner_target_url || '';
+        this.updateAdPreview('banner-preview', this.appConfig.banner_image_url);
+        
+        // Interstitial Ad
+        document.getElementById('interstitial-image-url').value = this.appConfig.interstitial_image_url || '';
+        document.getElementById('interstitial-target-url').value = this.appConfig.interstitial_target_url || '';
+        this.updateAdPreview('interstitial-preview', this.appConfig.interstitial_image_url);
+        
+        // Permanent Poster Ad
+        document.getElementById('poster-image-url').value = this.appConfig.poster_image_url || '';
+        document.getElementById('poster-target-url').value = this.appConfig.poster_target_url || '';
+        this.updateAdPreview('poster-ad-preview', this.appConfig.poster_image_url);
+    }
 
-    /**
-     * Render movies table
-     */
-    renderMoviesTable() {
-        if (AdminState.movies.length === 0) {
-            Elements.moviesTableBody.innerHTML = `
-                <tr>
-                    <td colspan="5" style="text-align: center; padding: 40px; color: var(--text-secondary);">
-                        No movies found. Add your first movie above!
-                    </td>
-                </tr>
-            `;
+    // ============================================
+    // NAVIGATION
+    // ============================================
+
+    switchSection(sectionId) {
+        // Update nav items
+        this.navItems.forEach(item => {
+            item.classList.toggle('active', item.dataset.section === sectionId);
+        });
+        
+        // Update sections
+        this.sections.forEach(section => {
+            section.classList.toggle('hidden', section.id !== `section-${sectionId}`);
+            section.classList.toggle('active', section.id === `section-${sectionId}`);
+        });
+        
+        // Update page title
+        const titles = {
+            'dashboard': 'Dashboard',
+            'movies': 'Movies Management',
+            'add-movie': 'Add Movie',
+            'ads': 'Ad Controller',
+            'settings': 'Settings'
+        };
+        this.pageTitle.textContent = titles[sectionId] || 'Dashboard';
+        
+        // Close sidebar on mobile
+        if (window.innerWidth <= 768) {
+            this.sidebar.classList.remove('open');
+        }
+    }
+
+    toggleSidebar() {
+        this.sidebar.classList.toggle('open');
+    }
+
+    // ============================================
+    // MOVIES MANAGEMENT
+    // ============================================
+
+    renderMoviesTable(movies = this.movies) {
+        if (movies.length === 0) {
+            this.moviesTableBody.innerHTML = '';
+            this.tableEmpty.classList.remove('hidden');
             return;
         }
-
-        Elements.moviesTableBody.innerHTML = AdminState.movies.map(movie => `
+        
+        this.tableEmpty.classList.add('hidden');
+        
+        this.moviesTableBody.innerHTML = movies.map(movie => `
             <tr>
                 <td>
-                    <img 
-                        src="${movie.poster_url || 'https://via.placeholder.com/50x75?text=No+Poster'}" 
-                        alt="${movie.title}"
-                        onerror="this.src='https://via.placeholder.com/50x75?text=Error';"
-                    >
+                    <img src="${movie.poster_url}" alt="${movie.title}" class="table-poster"
+                         onerror="this.src='https://via.placeholder.com/50x75?text=No+Image'">
                 </td>
                 <td>${movie.title}</td>
-                <td>${movie.year || '-'}</td>
-                <td>${movie.rating || '-'}</td>
+                <td>${movie.year || 'N/A'}</td>
+                <td>
+                    <span style="color: #f5c518;">
+                        <i class="fas fa-star"></i> ${movie.rating || 'N/A'}
+                    </span>
+                </td>
                 <td>
                     <div class="table-actions">
-                        <button class="btn btn-secondary btn-small" onclick="Movies.openEditModal('${movie.$id}')">
-                            ✏️ Edit
+                        <button class="edit-btn" onclick="admin.editMovie('${movie.$id}')" title="Edit">
+                            <i class="fas fa-edit"></i>
                         </button>
-                        <button class="btn btn-danger btn-small" onclick="Movies.deleteMovie('${movie.$id}')">
-                            🗑️ Delete
+                        <button class="delete-btn-small" onclick="admin.showDeleteModal('${movie.$id}', '${movie.title.replace(/'/g, "\\'")}')" title="Delete">
+                            <i class="fas fa-trash"></i>
                         </button>
                     </div>
                 </td>
             </tr>
         `).join('');
-    },
+    }
 
-    /**
-     * Populate ad forms with existing data
-     */
-    populateAdForms() {
-        if (!AdminState.appConfig) return;
-
-        const config = AdminState.appConfig;
+    renderRecentMovies() {
+        const recent = this.movies.slice(0, 5);
         
-        // Banner Ad
-        Elements.bannerImageUrl.value = config.banner_image_url || '';
-        Elements.bannerTargetUrl.value = config.banner_target_url || '';
-        this.updateBannerPreview(config.banner_image_url);
-        
-        // Interstitial Ad
-        Elements.interstitialImageUrl.value = config.interstitial_image_url || '';
-        Elements.interstitialTargetUrl.value = config.interstitial_target_url || '';
-        this.updateInterstitialPreview(config.interstitial_image_url);
-    },
-
-    /**
-     * Update banner preview
-     */
-    updateBannerPreview(url) {
-        if (url) {
-            Elements.bannerPreview.src = url;
-            Elements.bannerPreview.style.display = 'block';
-            Elements.bannerNoPreview.style.display = 'none';
-        } else {
-            Elements.bannerPreview.style.display = 'none';
-            Elements.bannerNoPreview.style.display = 'block';
+        if (recent.length === 0) {
+            this.recentMoviesList.innerHTML = '<p class="text-muted">No movies added yet</p>';
+            return;
         }
-    },
+        
+        this.recentMoviesList.innerHTML = recent.map(movie => `
+            <div class="recent-item">
+                <img src="${movie.poster_url}" alt="${movie.title}"
+                     onerror="this.src='https://via.placeholder.com/50x75?text=No+Image'">
+                <div class="recent-info">
+                    <h4>${movie.title}</h4>
+                    <p>${movie.year || 'N/A'} • ${movie.rating || 'N/A'} ★</p>
+                </div>
+            </div>
+        `).join('');
+    }
 
-    /**
-     * Update interstitial preview
-     */
-    updateInterstitialPreview(url) {
-        if (url) {
-            Elements.interstitialPreview.src = url;
-            Elements.interstitialPreview.style.display = 'block';
-            Elements.interstitialNoPreview.style.display = 'none';
-        } else {
-            Elements.interstitialPreview.style.display = 'none';
-            Elements.interstitialNoPreview.style.display = 'block';
+    updateDashboardStats() {
+        this.totalMovies.textContent = this.movies.length;
+    }
+
+    searchMovies(query) {
+        query = query.toLowerCase().trim();
+        
+        if (query === '') {
+            this.renderMoviesTable();
+            return;
+        }
+        
+        const filtered = this.movies.filter(movie => 
+            movie.title.toLowerCase().includes(query)
+        );
+        
+        this.renderMoviesTable(filtered);
+    }
+
+    async handleMovieSubmit(e) {
+        e.preventDefault();
+        
+        const movieData = {
+            title: document.getElementById('movie-title').value,
+            description: document.getElementById('movie-description').value,
+            poster_url: document.getElementById('movie-poster').value,
+            year: parseInt(document.getElementById('movie-year').value),
+            rating: parseFloat(document.getElementById('movie-rating').value),
+            category: document.getElementById('movie-category').value,
+            duration: document.getElementById('movie-duration').value,
+            download_480p: document.getElementById('download-480p').value,
+            download_720p: document.getElementById('download-720p').value,
+            download_1080p: document.getElementById('download-1080p').value
+        };
+        
+        try {
+            this.showLoading();
+            
+            if (this.editingMovieId) {
+                // Update existing movie
+                await databases.updateDocument(
+                    AppConfig.databaseId,
+                    AppConfig.collections.movies,
+                    this.editingMovieId,
+                    movieData
+                );
+                
+                this.showToast('Movie updated successfully', 'success');
+            } else {
+                // Create new movie
+                await databases.createDocument(
+                    AppConfig.databaseId,
+                    AppConfig.collections.movies,
+                    'unique()',
+                    movieData
+                );
+                
+                this.showToast('Movie added successfully', 'success');
+            }
+            
+            // Reload movies and reset form
+            await this.loadMovies();
+            this.resetForm();
+            this.switchSection('movies');
+            
+        } catch (error) {
+            console.error('Error saving movie:', error);
+            this.showToast('Failed to save movie', 'error');
+        } finally {
+            this.hideLoading();
         }
     }
-};
 
-// ==================================================
-// MOVIES CRUD
-// ==================================================
-
-const Movies = {
-    /**
-     * Add new movie
-     */
-    async addMovie(formData) {
-        try {
-            const movieData = {
-                title: formData.get('title'),
-                year: formData.get('year') ? parseInt(formData.get('year')) : null,
-                rating: formData.get('rating') ? parseFloat(formData.get('rating')) : null,
-                poster_url: formData.get('poster_url'),
-                description: formData.get('description') || null,
-                download_480p: formData.get('download_480p') || null,
-                download_720p: formData.get('download_720p') || null,
-                download_1080p: formData.get('download_1080p') || null
-            };
-
-            await databases.createDocument(
-                CONFIG.appwrite.databaseId,
-                CONFIG.appwrite.collections.movies,
-                Appwrite.ID.unique(),
-                movieData
-            );
-
-            showToast('Movie added successfully!', 'success');
-            Elements.addMovieForm.reset();
-            await Dashboard.loadMovies();
-            Dashboard.updateStats();
-            this.invalidateCache();
-        } catch (error) {
-            console.error('Failed to add movie:', error);
-            showToast('Failed to add movie: ' + error.message, 'error');
+    editMovie(movieId) {
+        const movie = this.movies.find(m => m.$id === movieId);
+        
+        if (!movie) {
+            this.showToast('Movie not found', 'error');
+            return;
         }
-    },
+        
+        this.editingMovieId = movieId;
+        
+        // Populate form
+        this.movieIdInput.value = movieId;
+        document.getElementById('movie-title').value = movie.title || '';
+        document.getElementById('movie-description').value = movie.description || '';
+        document.getElementById('movie-poster').value = movie.poster_url || '';
+        document.getElementById('movie-year').value = movie.year || '';
+        document.getElementById('movie-rating').value = movie.rating || '';
+        document.getElementById('movie-category').value = movie.category || 'action';
+        document.getElementById('movie-duration').value = movie.duration || '';
+        document.getElementById('download-480p').value = movie.download_480p || '';
+        document.getElementById('download-720p').value = movie.download_720p || '';
+        document.getElementById('download-1080p').value = movie.download_1080p || '';
+        
+        // Update preview
+        this.updatePosterPreview(movie.poster_url);
+        
+        // Update form heading
+        this.formHeading.textContent = 'Edit Movie';
+        this.submitText.textContent = 'Update Movie';
+        
+        // Switch to form section
+        this.switchSection('add-movie');
+    }
 
-    /**
-     * Open edit modal
-     */
-    openEditModal(movieId) {
-        const movie = AdminState.movies.find(m => m.$id === movieId);
-        if (!movie) return;
+    showDeleteModal(movieId, movieTitle) {
+        this.movieToDelete = movieId;
+        this.deleteMovieTitle.textContent = movieTitle;
+        this.deleteModal.classList.remove('hidden');
+    }
 
-        document.getElementById('editMovieId').value = movie.$id;
-        document.getElementById('editTitle').value = movie.title;
-        document.getElementById('editYear').value = movie.year || '';
-        document.getElementById('editRating').value = movie.rating || '';
-        document.getElementById('editPoster').value = movie.poster_url || '';
-        document.getElementById('editDescription').value = movie.description || '';
-        document.getElementById('editDownload480p').value = movie.download_480p || '';
-        document.getElementById('editDownload720p').value = movie.download_720p || '';
-        document.getElementById('editDownload1080p').value = movie.download_1080p || '';
+    closeDeleteModal() {
+        this.deleteModal.classList.add('hidden');
+        this.movieToDelete = null;
+    }
 
-        Elements.editModal.classList.add('active');
-    },
-
-    /**
-     * Close edit modal
-     */
-    closeEditModal() {
-        Elements.editModal.classList.remove('active');
-        Elements.editMovieForm.reset();
-    },
-
-    /**
-     * Update movie
-     */
-    async updateMovie(movieId, formData) {
+    async confirmDelete() {
+        if (!this.movieToDelete) return;
+        
         try {
-            const movieData = {
-                title: formData.get('title'),
-                year: formData.get('year') ? parseInt(formData.get('year')) : null,
-                rating: formData.get('rating') ? parseFloat(formData.get('rating')) : null,
-                poster_url: formData.get('poster_url'),
-                description: formData.get('description') || null,
-                download_480p: formData.get('download_480p') || null,
-                download_720p: formData.get('download_720p') || null,
-                download_1080p: formData.get('download_1080p') || null
-            };
-
-            await databases.updateDocument(
-                CONFIG.appwrite.databaseId,
-                CONFIG.appwrite.collections.movies,
-                movieId,
-                movieData
-            );
-
-            showToast('Movie updated successfully!', 'success');
-            this.closeEditModal();
-            await Dashboard.loadMovies();
-            this.invalidateCache();
-        } catch (error) {
-            console.error('Failed to update movie:', error);
-            showToast('Failed to update movie: ' + error.message, 'error');
-        }
-    },
-
-    /**
-     * Delete movie
-     */
-    async deleteMovie(movieId) {
-        if (!confirm('Are you sure you want to delete this movie?')) return;
-
-        try {
+            this.showLoading();
+            
             await databases.deleteDocument(
-                CONFIG.appwrite.databaseId,
-                CONFIG.appwrite.collections.movies,
-                movieId
+                AppConfig.databaseId,
+                AppConfig.collections.movies,
+                this.movieToDelete
             );
-
-            showToast('Movie deleted successfully!', 'success');
-            await Dashboard.loadMovies();
-            Dashboard.updateStats();
-            this.invalidateCache();
+            
+            this.showToast('Movie deleted successfully', 'success');
+            await this.loadMovies();
+            this.closeDeleteModal();
+            
         } catch (error) {
-            console.error('Failed to delete movie:', error);
-            showToast('Failed to delete movie: ' + error.message, 'error');
+            console.error('Error deleting movie:', error);
+            this.showToast('Failed to delete movie', 'error');
+        } finally {
+            this.hideLoading();
         }
-    },
-
-    /**
-     * Invalidate user cache
-     */
-    invalidateCache() {
-        const newVersion = Date.now().toString();
-        localStorage.setItem(CONFIG.cache.versionKey, newVersion);
     }
-};
 
-// ==================================================
-// ADS MANAGEMENT
-// ==================================================
+    resetForm() {
+        this.editingMovieId = null;
+        this.movieForm.reset();
+        this.movieIdInput.value = '';
+        this.formHeading.textContent = 'Add New Movie';
+        this.submitText.textContent = 'Add Movie';
+        this.posterPreview.classList.remove('loaded');
+    }
 
-const Ads = {
-    /**
-     * Save banner ad settings
-     */
-    async saveBannerAd(imageUrl, targetUrl) {
-        try {
-            const data = {
-                banner_image_url: imageUrl || null,
-                banner_target_url: targetUrl || null
-            };
-
-            if (AdminState.configDocId) {
-                await databases.updateDocument(
-                    CONFIG.appwrite.databaseId,
-                    CONFIG.appwrite.collections.appConfig,
-                    AdminState.configDocId,
-                    data
-                );
-            } else {
-                const response = await databases.createDocument(
-                    CONFIG.appwrite.databaseId,
-                    CONFIG.appwrite.collections.appConfig,
-                    Appwrite.ID.unique(),
-                    data
-                );
-                AdminState.configDocId = response.$id;
-            }
-
-            showToast('Banner ad saved successfully!', 'success');
-            Dashboard.updateBannerPreview(imageUrl);
-            Movies.invalidateCache();
-        } catch (error) {
-            console.error('Failed to save banner ad:', error);
-            showToast('Failed to save banner ad: ' + error.message, 'error');
+    updatePosterPreview(url) {
+        if (url) {
+            this.posterPreview.src = url;
+            this.posterPreview.classList.add('loaded');
+        } else {
+            this.posterPreview.classList.remove('loaded');
         }
-    },
-
-    /**
-     * Save interstitial ad settings
-     */
-    async saveInterstitialAd(imageUrl, targetUrl) {
-        try {
-            const data = {
-                interstitial_image_url: imageUrl || null,
-                interstitial_target_url: targetUrl || null
-            };
-
-            if (AdminState.configDocId) {
-                await databases.updateDocument(
-                    CONFIG.appwrite.databaseId,
-                    CONFIG.appwrite.collections.appConfig,
-                    AdminState.configDocId,
-                    data
-                );
-            } else {
-                const response = await databases.createDocument(
-                    CONFIG.appwrite.databaseId,
-                    CONFIG.appwrite.collections.appConfig,
-                    Appwrite.ID.unique(),
-                    data
-                );
-                AdminState.configDocId = response.$id;
-            }
-
-            showToast('Interstitial ad saved successfully!', 'success');
-            Dashboard.updateInterstitialPreview(imageUrl);
-            Movies.invalidateCache();
-        } catch (error) {
-            console.error('Failed to save interstitial ad:', error);
-            showToast('Failed to save interstitial ad: ' + error.message, 'error');
-        }
-    },
-
-    /**
-     * Force refresh cache for all users
-     */
-    forceRefreshCache() {
-        const newVersion = Date.now().toString();
-        localStorage.setItem(CONFIG.cache.versionKey, newVersion);
-        showToast('Cache version updated! Users will fetch fresh data.', 'success');
     }
-};
 
-// ==================================================
-// EVENT LISTENERS
-// ==================================================
+    // ============================================
+    // AD MANAGEMENT
+    // ============================================
 
-// Login Form
-Elements.loginForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const password = Elements.passwordInput.value;
-    
-    if (Auth.login(password)) {
-        showToast('Welcome, Admin!', 'success');
-    } else {
-        showToast('Invalid password!', 'error');
-        Elements.passwordInput.value = '';
-        Elements.passwordInput.focus();
-    }
-});
-
-// Logout Button
-Elements.logoutBtn.addEventListener('click', () => {
-    Auth.logout();
-    showToast('Logged out successfully', 'info');
-});
-
-// Refresh Cache Button
-Elements.refreshCacheBtn.addEventListener('click', () => {
-    Ads.forceRefreshCache();
-});
-
-// Tab Navigation
-Elements.tabButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-        const tabName = btn.dataset.tab;
+    updateAdPreview(previewId, url) {
+        const preview = document.getElementById(previewId);
+        const img = preview.querySelector('img');
         
-        // Update button states
-        Elements.tabButtons.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+        if (url) {
+            img.src = url;
+        } else {
+            img.src = '';
+        }
+    }
+
+    async saveBannerAd(e) {
+        e.preventDefault();
         
-        // Update tab visibility
-        document.querySelectorAll('.tab-content').forEach(tab => {
-            tab.classList.remove('active');
-        });
-        document.getElementById(`${tabName}Tab`).classList.add('active');
-    });
-});
-
-// Add Movie Form
-Elements.addMovieForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const formData = new FormData();
-    
-    formData.set('title', document.getElementById('movieTitle').value);
-    formData.set('year', document.getElementById('movieYear').value);
-    formData.set('rating', document.getElementById('movieRating').value);
-    formData.set('poster_url', document.getElementById('moviePoster').value);
-    formData.set('description', document.getElementById('movieDescription').value);
-    formData.set('download_480p', document.getElementById('download480p').value);
-    formData.set('download_720p', document.getElementById('download720p').value);
-    formData.set('download_1080p', document.getElementById('download1080p').value);
-    
-    await Movies.addMovie(formData);
-});
-
-// Edit Movie Form
-Elements.editMovieForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const movieId = document.getElementById('editMovieId').value;
-    const formData = new FormData();
-    
-    formData.set('title', document.getElementById('editTitle').value);
-    formData.set('year', document.getElementById('editYear').value);
-    formData.set('rating', document.getElementById('editRating').value);
-    formData.set('poster_url', document.getElementById('editPoster').value);
-    formData.set('description', document.getElementById('editDescription').value);
-    formData.set('download_480p', document.getElementById('editDownload480p').value);
-    formData.set('download_720p', document.getElementById('editDownload720p').value);
-    formData.set('download_1080p', document.getElementById('editDownload1080p').value);
-    
-    await Movies.updateMovie(movieId, formData);
-});
-
-// Close Edit Modal
-Elements.closeEditModal.addEventListener('click', () => Movies.closeEditModal());
-Elements.cancelEditBtn.addEventListener('click', () => Movies.closeEditModal());
-
-// Banner Ad Form
-Elements.bannerAdForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    await Ads.saveBannerAd(
-        Elements.bannerImageUrl.value,
-        Elements.bannerTargetUrl.value
-    );
-});
-
-// Banner Image Preview
-Elements.bannerImageUrl.addEventListener('input', (e) => {
-    Dashboard.updateBannerPreview(e.target.value);
-});
-
-// Interstitial Ad Form
-Elements.interstitialAdForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    await Ads.saveInterstitialAd(
-        Elements.interstitialImageUrl.value,
-        Elements.interstitialTargetUrl.value
-    );
-});
-
-// Interstitial Image Preview
-Elements.interstitialImageUrl.addEventListener('input', (e) => {
-    Dashboard.updateInterstitialPreview(e.target.value);
-});
-
-// Close modal on escape key
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && Elements.editModal.classList.contains('active')) {
-        Movies.closeEditModal();
+        const data = {
+            banner_image_url: document.getElementById('banner-image-url').value,
+            banner_target_url: document.getElementById('banner-target-url').value
+        };
+        
+        await this.updateAppConfig(data, 'Banner ad saved successfully');
     }
-});
 
-// Close modal on background click
-Elements.editModal.addEventListener('click', (e) => {
-    if (e.target === Elements.editModal) {
-        Movies.closeEditModal();
+    async saveInterstitialAd(e) {
+        e.preventDefault();
+        
+        const data = {
+            interstitial_image_url: document.getElementById('interstitial-image-url').value,
+            interstitial_target_url: document.getElementById('interstitial-target-url').value
+        };
+        
+        await this.updateAppConfig(data, 'Interstitial ad saved successfully');
     }
-});
 
-// ==================================================
-// INITIALIZE
-// ==================================================
+    async savePosterAd(e) {
+        e.preventDefault();
+        
+        const data = {
+            poster_image_url: document.getElementById('poster-image-url').value,
+            poster_target_url: document.getElementById('poster-target-url').value
+        };
+        
+        await this.updateAppConfig(data, 'Poster ad saved successfully');
+    }
 
+    async updateAppConfig(data, successMessage) {
+        if (!this.appConfig) {
+            this.showToast('Configuration not loaded', 'error');
+            return;
+        }
+        
+        try {
+            this.showLoading();
+            
+            await databases.updateDocument(
+                AppConfig.databaseId,
+                AppConfig.collections.appConfig,
+                this.appConfig.$id,
+                data
+            );
+            
+            // Update local config
+            Object.assign(this.appConfig, data);
+            
+            this.showToast(successMessage, 'success');
+            
+        } catch (error) {
+            console.error('Error updating app config:', error);
+            this.showToast('Failed to save configuration', 'error');
+        } finally {
+            this.hideLoading();
+        }
+    }
+
+    // ============================================
+    // CACHE MANAGEMENT
+    // ============================================
+
+    async refreshCache() {
+        if (!this.appConfig) {
+            this.showToast('Configuration not loaded', 'error');
+            return;
+        }
+        
+        try {
+            this.showLoading();
+            
+            // Increment cache version
+            const newVersion = (parseInt(this.appConfig.cache_version || '0') + 1).toString();
+            
+            await databases.updateDocument(
+                AppConfig.databaseId,
+                AppConfig.collections.appConfig,
+                this.appConfig.$id,
+                { cache_version: newVersion }
+            );
+            
+            this.appConfig.cache_version = newVersion;
+            this.currentCacheVersion.textContent = newVersion;
+            
+            this.showToast('Cache refreshed! All users will fetch new data.', 'success');
+            
+        } catch (error) {
+            console.error('Error refreshing cache:', error);
+            this.showToast('Failed to refresh cache', 'error');
+        } finally {
+            this.hideLoading();
+        }
+    }
+
+    // ============================================
+    // PASSWORD MANAGEMENT
+    // ============================================
+
+    changePassword(e) {
+        e.preventDefault();
+        
+        const currentPassword = document.getElementById('current-password').value;
+        const newPassword = document.getElementById('new-password').value;
+        const confirmPassword = document.getElementById('confirm-password').value;
+        
+        if (currentPassword !== AppConfig.adminPassword) {
+            this.showToast('Current password is incorrect', 'error');
+            return;
+        }
+        
+        if (newPassword !== confirmPassword) {
+            this.showToast('New passwords do not match', 'error');
+            return;
+        }
+        
+        if (newPassword.length < 6) {
+            this.showToast('Password must be at least 6 characters', 'error');
+            return;
+        }
+        
+        // In a real app, you would save this to a secure backend
+        // For this demo, we'll just update the local config
+        AppConfig.adminPassword = newPassword;
+        
+        this.showToast('Password changed successfully', 'success');
+        this.passwordForm.reset();
+    }
+
+    // ============================================
+    // MODAL MANAGEMENT
+    // ============================================
+
+    closeModal() {
+        this.editModal.classList.add('hidden');
+    }
+
+    // ============================================
+    // UI HELPERS
+    // ============================================
+
+    showLoading() {
+        this.loadingOverlay.classList.remove('hidden');
+    }
+
+    hideLoading() {
+        this.loadingOverlay.classList.add('hidden');
+    }
+
+    showToast(message, type = 'info') {
+        const icons = {
+            success: 'fa-check-circle',
+            error: 'fa-exclamation-circle',
+            warning: 'fa-exclamation-triangle',
+            info: 'fa-info-circle'
+        };
+        
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.innerHTML = `
+            <i class="fas ${icons[type]}"></i>
+            <span>${message}</span>
+        `;
+        
+        this.toastContainer.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.classList.add('toast-out');
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+}
+
+// Initialize admin panel
+let admin;
 document.addEventListener('DOMContentLoaded', () => {
-    // Check for existing session
-    if (Auth.checkSession()) {
-        Auth.showDashboard();
-    }
+    admin = new AdminPanel();
 });
