@@ -3,264 +3,483 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="robots" content="noindex, nofollow">
     <title>MovieFlix Admin Panel</title>
-    <link rel="stylesheet" href="css/style.css">
-    <!-- Appwrite SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/appwrite@14.0.0"></script>
+    <link rel="stylesheet" href="css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
-<body>
+<body class="admin-body">
     <!-- Login Screen -->
-    <div id="loginScreen" class="login-container">
-        <div class="login-card">
-            <h1 class="login-title">🔐 Admin Login</h1>
-            <p class="login-subtitle">Enter password to access the panel</p>
-            <form id="loginForm">
-                <div class="form-group">
-                    <label class="form-label" for="password">Password</label>
-                    <input 
-                        type="password" 
-                        id="password" 
-                        class="form-input" 
-                        placeholder="Enter admin password"
-                        required
-                        autocomplete="current-password"
-                    >
+    <div id="login-screen" class="login-screen">
+        <div class="login-container">
+            <div class="login-header">
+                <i class="fas fa-shield-alt"></i>
+                <h1>Admin Panel</h1>
+                <p>Enter password to continue</p>
+            </div>
+            <form id="login-form" class="login-form">
+                <div class="input-group">
+                    <i class="fas fa-lock"></i>
+                    <input type="password" id="admin-password" placeholder="Enter Password" required>
+                    <button type="button" class="toggle-password" id="toggle-password">
+                        <i class="fas fa-eye"></i>
+                    </button>
                 </div>
-                <button type="submit" class="btn btn-primary">
-                    🚀 Access Panel
+                <button type="submit" class="login-btn">
+                    <i class="fas fa-sign-in-alt"></i> Login
                 </button>
             </form>
+            <p class="login-error hidden" id="login-error">
+                <i class="fas fa-exclamation-circle"></i> Incorrect password
+            </p>
         </div>
     </div>
 
     <!-- Admin Dashboard -->
-    <div id="adminDashboard" class="admin-container">
-        <!-- Header -->
-        <header class="admin-header">
-            <div class="admin-header-content">
-                <h1 class="admin-title">
-                    <span>🎬</span>
-                    <span>MovieFlix Admin</span>
-                </h1>
-                <div class="admin-actions">
-                    <button id="refreshCacheBtn" class="btn btn-secondary btn-small">
-                        🔄 Force Refresh Cache
-                    </button>
-                    <button id="logoutBtn" class="btn btn-danger btn-small">
-                        🚪 Logout
-                    </button>
-                </div>
+    <div id="admin-dashboard" class="admin-dashboard hidden">
+        <!-- Sidebar -->
+        <aside class="admin-sidebar">
+            <div class="sidebar-header">
+                <i class="fas fa-film"></i>
+                <span>MovieFlix</span>
+                <small>Admin Panel</small>
             </div>
-        </header>
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-section="dashboard">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Dashboard</span>
+                </button>
+                <button class="nav-item" data-section="movies">
+                    <i class="fas fa-film"></i>
+                    <span>Movies</span>
+                </button>
+                <button class="nav-item" data-section="add-movie">
+                    <i class="fas fa-plus-circle"></i>
+                    <span>Add Movie</span>
+                </button>
+                <button class="nav-item" data-section="ads">
+                    <i class="fas fa-ad"></i>
+                    <span>Ad Controller</span>
+                </button>
+                <button class="nav-item" data-section="settings">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </button>
+            </nav>
+            <button class="logout-btn" id="logout-btn">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Logout</span>
+            </button>
+        </aside>
 
         <!-- Main Content -->
-        <div class="admin-content">
-            <!-- Stats Section -->
-            <div class="card">
-                <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
-                    <div style="text-align: center; padding: 16px; background: var(--bg-primary); border-radius: 8px;">
-                        <div style="font-size: 2rem; font-weight: 700; color: var(--accent);" id="totalMovies">0</div>
-                        <div style="color: var(--text-secondary); font-size: 0.9rem;">Total Movies</div>
+        <main class="admin-main">
+            <!-- Mobile Header -->
+            <header class="mobile-header">
+                <button class="menu-toggle" id="menu-toggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h2 id="page-title">Dashboard</h2>
+                <button class="logout-mobile" id="logout-mobile">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </header>
+
+            <!-- Dashboard Section -->
+            <section id="section-dashboard" class="admin-section active">
+                <h2 class="section-heading">Dashboard Overview</h2>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon movies">
+                            <i class="fas fa-film"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="total-movies">0</h3>
+                            <p>Total Movies</p>
+                        </div>
                     </div>
-                    <div style="text-align: center; padding: 16px; background: var(--bg-primary); border-radius: 8px;">
-                        <div style="font-size: 2rem; font-weight: 700; color: var(--success);" id="cacheStatus">Active</div>
-                        <div style="color: var(--text-secondary); font-size: 0.9rem;">Cache Status</div>
+                    <div class="stat-card">
+                        <div class="stat-icon views">
+                            <i class="fas fa-eye"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="total-views">0</h3>
+                            <p>Total Views</p>
+                        </div>
                     </div>
-                    <div style="text-align: center; padding: 16px; background: var(--bg-primary); border-radius: 8px;">
-                        <div style="font-size: 2rem; font-weight: 700; color: var(--warning);" id="lastUpdated">-</div>
-                        <div style="color: var(--text-secondary); font-size: 0.9rem;">Last Updated</div>
+                    <div class="stat-card">
+                        <div class="stat-icon downloads">
+                            <i class="fas fa-download"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="total-downloads">0</h3>
+                            <p>Downloads</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon cache">
+                            <i class="fas fa-database"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="cache-status">Active</h3>
+                            <p>Cache Status</p>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Tabs -->
-            <div class="tabs">
-                <button class="tab-btn active" data-tab="movies">📽️ Movies</button>
-                <button class="tab-btn" data-tab="ads">📢 Advertisements</button>
-            </div>
-
-            <!-- Movies Tab -->
-            <div id="moviesTab" class="tab-content active">
-                <!-- Add Movie Form -->
-                <div class="card">
-                    <h3 class="card-title">➕ Add New Movie</h3>
-                    <form id="addMovieForm">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label class="form-label" for="movieTitle">Title *</label>
-                                <input type="text" id="movieTitle" class="form-input" placeholder="Movie title" required>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label" for="movieYear">Year</label>
-                                <input type="number" id="movieYear" class="form-input" placeholder="2024" min="1900" max="2100">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label" for="movieRating">Rating</label>
-                                <input type="number" id="movieRating" class="form-input" placeholder="8.5" step="0.1" min="0" max="10">
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="moviePoster">Poster URL *</label>
-                            <input type="url" id="moviePoster" class="form-input" placeholder="https://example.com/poster.jpg" required>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="movieDescription">Description</label>
-                            <textarea id="movieDescription" class="form-textarea" placeholder="Movie description/story..."></textarea>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label class="form-label" for="download480p">480p Download Link</label>
-                                <input type="url" id="download480p" class="form-input" placeholder="https://shortener.com/...">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label" for="download720p">720p Download Link</label>
-                                <input type="url" id="download720p" class="form-input" placeholder="https://shortener.com/...">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label" for="download1080p">1080p Download Link</label>
-                                <input type="url" id="download1080p" class="form-input" placeholder="https://shortener.com/...">
-                            </div>
-                        </div>
-                        <button type="submit" class="btn btn-primary" style="max-width: 200px;">
-                            ➕ Add Movie
+                <div class="quick-actions">
+                    <h3>Quick Actions</h3>
+                    <div class="action-buttons">
+                        <button class="action-btn" id="quick-add-movie">
+                            <i class="fas fa-plus"></i>
+                            Add Movie
                         </button>
-                    </form>
-                </div>
-
-                <!-- Movies Table -->
-                <div class="card">
-                    <h3 class="card-title">📋 All Movies</h3>
-                    <div class="table-container">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Poster</th>
-                                    <th>Title</th>
-                                    <th>Year</th>
-                                    <th>Rating</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="moviesTableBody">
-                                <tr>
-                                    <td colspan="5" style="text-align: center; padding: 40px;">
-                                        <div class="spinner"></div>
-                                        <p style="margin-top: 16px; color: var(--text-secondary);">Loading movies...</p>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        <button class="action-btn" id="quick-refresh-cache">
+                            <i class="fas fa-sync"></i>
+                            Refresh Cache
+                        </button>
+                        <button class="action-btn" id="quick-view-site">
+                            <i class="fas fa-external-link-alt"></i>
+                            View Site
+                        </button>
                     </div>
                 </div>
+
+                <div class="recent-movies">
+                    <h3>Recent Movies</h3>
+                    <div class="recent-list" id="recent-movies-list">
+                        <!-- Recent movies will be loaded here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Movies Management Section -->
+            <section id="section-movies" class="admin-section hidden">
+                <div class="section-header">
+                    <h2 class="section-heading">Movies Management</h2>
+                    <div class="header-actions">
+                        <input type="text" id="movie-search" placeholder="Search movies..." class="search-input">
+                        <button class="add-btn" id="add-movie-btn">
+                            <i class="fas fa-plus"></i> Add New
+                        </button>
+                    </div>
+                </div>
+
+                <div class="movies-table-container">
+                    <table class="movies-table">
+                        <thead>
+                            <tr>
+                                <th>Poster</th>
+                                <th>Title</th>
+                                <th>Year</th>
+                                <th>Rating</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="movies-table-body">
+                            <!-- Movies will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="table-empty hidden" id="table-empty">
+                    <i class="fas fa-film"></i>
+                    <p>No movies found</p>
+                </div>
+            </section>
+
+            <!-- Add/Edit Movie Section -->
+            <section id="section-add-movie" class="admin-section hidden">
+                <h2 class="section-heading" id="form-heading">Add New Movie</h2>
+                
+                <form id="movie-form" class="movie-form">
+                    <input type="hidden" id="movie-id" value="">
+                    
+                    <div class="form-grid">
+                        <div class="form-group full-width">
+                            <label for="movie-title">
+                                <i class="fas fa-heading"></i> Movie Title *
+                            </label>
+                            <input type="text" id="movie-title" required placeholder="Enter movie title">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="movie-year">
+                                <i class="fas fa-calendar"></i> Year *
+                            </label>
+                            <input type="number" id="movie-year" required placeholder="2024" min="1900" max="2100">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="movie-rating">
+                                <i class="fas fa-star"></i> Rating (0-10) *
+                            </label>
+                            <input type="number" id="movie-rating" required placeholder="8.5" step="0.1" min="0" max="10">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="movie-category">
+                                <i class="fas fa-tag"></i> Category
+                            </label>
+                            <select id="movie-category">
+                                <option value="action">Action</option>
+                                <option value="drama">Drama</option>
+                                <option value="comedy">Comedy</option>
+                                <option value="horror">Horror</option>
+                                <option value="sci-fi">Sci-Fi</option>
+                                <option value="romance">Romance</option>
+                                <option value="thriller">Thriller</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="movie-duration">
+                                <i class="fas fa-clock"></i> Duration
+                            </label>
+                            <input type="text" id="movie-duration" placeholder="2h 15m">
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="movie-poster">
+                                <i class="fas fa-image"></i> Poster URL *
+                            </label>
+                            <input type="url" id="movie-poster" required placeholder="https://example.com/poster.jpg">
+                            <div class="poster-preview" id="poster-preview">
+                                <img src="" alt="Poster Preview" id="preview-image">
+                            </div>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="movie-description">
+                                <i class="fas fa-align-left"></i> Description *
+                            </label>
+                            <textarea id="movie-description" required rows="4" placeholder="Enter movie description..."></textarea>
+                        </div>
+
+                        <div class="form-divider">
+                            <span>Download Links</span>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="download-480p">
+                                <i class="fas fa-download"></i> 480p Download Link
+                            </label>
+                            <input type="url" id="download-480p" placeholder="https://shortener.com/movie480p">
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="download-720p">
+                                <i class="fas fa-download"></i> 720p Download Link
+                            </label>
+                            <input type="url" id="download-720p" placeholder="https://shortener.com/movie720p">
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="download-1080p">
+                                <i class="fas fa-download"></i> 1080p Download Link
+                            </label>
+                            <input type="url" id="download-1080p" placeholder="https://shortener.com/movie1080p">
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" class="cancel-btn" id="cancel-form">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                        <button type="submit" class="submit-btn">
+                            <i class="fas fa-save"></i> <span id="submit-text">Add Movie</span>
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Ad Controller Section -->
+            <section id="section-ads" class="admin-section hidden">
+                <h2 class="section-heading">Ad Controller</h2>
+
+                <div class="ads-grid">
+                    <!-- Banner Ad Settings -->
+                    <div class="ad-card">
+                        <div class="ad-card-header">
+                            <i class="fas fa-image"></i>
+                            <h3>Banner Ad</h3>
+                        </div>
+                        <form id="banner-ad-form" class="ad-form">
+                            <div class="form-group">
+                                <label>Banner Image URL</label>
+                                <input type="url" id="banner-image-url" placeholder="https://example.com/banner.jpg">
+                            </div>
+                            <div class="form-group">
+                                <label>Target Link (Click URL)</label>
+                                <input type="url" id="banner-target-url" placeholder="https://example.com">
+                            </div>
+                            <div class="ad-preview" id="banner-preview">
+                                <img src="" alt="Banner Preview">
+                            </div>
+                            <button type="submit" class="save-ad-btn">
+                                <i class="fas fa-save"></i> Save Banner Ad
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Interstitial Ad Settings -->
+                    <div class="ad-card">
+                        <div class="ad-card-header">
+                            <i class="fas fa-expand"></i>
+                            <h3>Interstitial Ad</h3>
+                        </div>
+                        <form id="interstitial-ad-form" class="ad-form">
+                            <div class="form-group">
+                                <label>Interstitial Image URL</label>
+                                <input type="url" id="interstitial-image-url" placeholder="https://example.com/interstitial.jpg">
+                            </div>
+                            <div class="form-group">
+                                <label>Target Link (Click URL)</label>
+                                <input type="url" id="interstitial-target-url" placeholder="https://example.com">
+                            </div>
+                            <div class="ad-preview" id="interstitial-preview">
+                                <img src="" alt="Interstitial Preview">
+                            </div>
+                            <button type="submit" class="save-ad-btn">
+                                <i class="fas fa-save"></i> Save Interstitial Ad
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Permanent Poster Ad Settings -->
+                    <div class="ad-card">
+                        <div class="ad-card-header">
+                            <i class="fas fa-sticky-note"></i>
+                            <h3>Permanent Poster Ad</h3>
+                            <small>Shows at bottom of all pages</small>
+                        </div>
+                        <form id="poster-ad-form" class="ad-form">
+                            <div class="form-group">
+                                <label>Poster Image URL</label>
+                                <input type="url" id="poster-image-url" placeholder="https://example.com/poster-ad.jpg">
+                            </div>
+                            <div class="form-group">
+                                <label>Target Link (Click URL)</label>
+                                <input type="url" id="poster-target-url" placeholder="https://example.com">
+                            </div>
+                            <div class="ad-preview" id="poster-ad-preview">
+                                <img src="" alt="Poster Ad Preview">
+                            </div>
+                            <button type="submit" class="save-ad-btn">
+                                <i class="fas fa-save"></i> Save Poster Ad
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings Section -->
+            <section id="section-settings" class="admin-section hidden">
+                <h2 class="section-heading">Settings</h2>
+
+                <div class="settings-grid">
+                    <!-- Cache Control -->
+                    <div class="settings-card">
+                        <div class="settings-header">
+                            <i class="fas fa-database"></i>
+                            <h3>Cache Control</h3>
+                        </div>
+                        <p>Force all users to fetch new data by refreshing the cache version.</p>
+                        <div class="cache-info">
+                            <span>Current Version: <strong id="current-cache-version">1</strong></span>
+                            <span>Last Updated: <strong id="last-cache-update">Never</strong></span>
+                        </div>
+                        <button class="refresh-cache-btn" id="refresh-cache-btn">
+                            <i class="fas fa-sync-alt"></i> Refresh Cache for All Users
+                        </button>
+                    </div>
+
+                    <!-- Password Change -->
+                    <div class="settings-card">
+                        <div class="settings-header">
+                            <i class="fas fa-key"></i>
+                            <h3>Change Password</h3>
+                        </div>
+                        <form id="password-form" class="password-form">
+                            <div class="form-group">
+                                <label>Current Password</label>
+                                <input type="password" id="current-password" required>
+                            </div>
+                            <div class="form-group">
+                                <label>New Password</label>
+                                <input type="password" id="new-password" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Confirm New Password</label>
+                                <input type="password" id="confirm-password" required>
+                            </div>
+                            <button type="submit" class="change-password-btn">
+                                <i class="fas fa-save"></i> Update Password
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Database Info -->
+                    <div class="settings-card">
+                        <div class="settings-header">
+                            <i class="fas fa-server"></i>
+                            <h3>Database Info</h3>
+                        </div>
+                        <div class="db-info">
+                            <p><strong>Endpoint:</strong> <span id="db-endpoint">cloud.appwrite.io</span></p>
+                            <p><strong>Project ID:</strong> <span id="db-project">69921d010019e2d80f37</span></p>
+                            <p><strong>Database ID:</strong> <span id="db-database">69926a04003e2dda63d6</span></p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Edit Movie Modal -->
+    <div id="edit-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edit Movie</h3>
+                <button class="close-modal" id="close-modal">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
-
-            <!-- Ads Tab -->
-            <div id="adsTab" class="tab-content">
-                <!-- Banner Ad Settings -->
-                <div class="card">
-                    <h3 class="card-title">🖼️ Banner Ad Settings</h3>
-                    <form id="bannerAdForm">
-                        <div class="form-group">
-                            <label class="form-label" for="bannerImageUrl">Banner Image URL</label>
-                            <input type="url" id="bannerImageUrl" class="form-input" placeholder="https://example.com/banner.jpg">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="bannerTargetUrl">Banner Target Link</label>
-                            <input type="url" id="bannerTargetUrl" class="form-input" placeholder="https://advertiser.com/offer">
-                        </div>
-                        <div class="preview-box">
-                            <p style="margin-bottom: 12px; color: var(--text-secondary);">Preview:</p>
-                            <img id="bannerPreview" class="preview-image" src="" alt="Banner Preview" style="display: none;">
-                            <p id="bannerNoPreview" style="color: var(--text-muted);">No banner image set</p>
-                        </div>
-                        <button type="submit" class="btn btn-success" style="max-width: 200px; margin-top: 16px;">
-                            💾 Save Banner Ad
-                        </button>
-                    </form>
-                </div>
-
-                <!-- Interstitial Ad Settings -->
-                <div class="card">
-                    <h3 class="card-title">📱 Interstitial Ad Settings</h3>
-                    <form id="interstitialAdForm">
-                        <div class="form-group">
-                            <label class="form-label" for="interstitialImageUrl">Interstitial Image URL</label>
-                            <input type="url" id="interstitialImageUrl" class="form-input" placeholder="https://example.com/interstitial.jpg">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="interstitialTargetUrl">Interstitial Target Link</label>
-                            <input type="url" id="interstitialTargetUrl" class="form-input" placeholder="https://advertiser.com/offer">
-                        </div>
-                        <div class="preview-box">
-                            <p style="margin-bottom: 12px; color: var(--text-secondary);">Preview:</p>
-                            <img id="interstitialPreview" class="preview-image" src="" alt="Interstitial Preview" style="display: none;">
-                            <p id="interstitialNoPreview" style="color: var(--text-muted);">No interstitial image set</p>
-                        </div>
-                        <button type="submit" class="btn btn-success" style="max-width: 200px; margin-top: 16px;">
-                            💾 Save Interstitial Ad
-                        </button>
-                    </form>
-                </div>
+            <div class="modal-body" id="modal-body">
+                <!-- Edit form will be loaded here -->
             </div>
         </div>
     </div>
 
-    <!-- Edit Movie Modal -->
-    <div id="editModal" class="interstitial-overlay">
-        <div class="interstitial-content" style="max-width: 600px; max-height: 90vh; overflow-y: auto;">
-            <button id="closeEditModal" class="interstitial-close" style="position: sticky; top: 0;">✕</button>
-            <div style="padding: 24px;">
-                <h3 style="margin-bottom: 20px;">✏️ Edit Movie</h3>
-                <form id="editMovieForm">
-                    <input type="hidden" id="editMovieId">
-                    <div class="form-group">
-                        <label class="form-label" for="editTitle">Title *</label>
-                        <input type="text" id="editTitle" class="form-input" required>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label class="form-label" for="editYear">Year</label>
-                            <input type="number" id="editYear" class="form-input" min="1900" max="2100">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="editRating">Rating</label>
-                            <input type="number" id="editRating" class="form-input" step="0.1" min="0" max="10">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="editPoster">Poster URL *</label>
-                        <input type="url" id="editPoster" class="form-input" required>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="editDescription">Description</label>
-                        <textarea id="editDescription" class="form-textarea"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="editDownload480p">480p Link</label>
-                        <input type="url" id="editDownload480p" class="form-input">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="editDownload720p">720p Link</label>
-                        <input type="url" id="editDownload720p" class="form-input">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="editDownload1080p">1080p Link</label>
-                        <input type="url" id="editDownload1080p" class="form-input">
-                    </div>
-                    <div style="display: flex; gap: 12px;">
-                        <button type="submit" class="btn btn-success">💾 Update</button>
-                        <button type="button" id="cancelEditBtn" class="btn btn-secondary">Cancel</button>
-                    </div>
-                </form>
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="modal hidden">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h3>Confirm Delete</h3>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete "<span id="delete-movie-title"></span>"?</p>
+                <p class="warning">This action cannot be undone.</p>
+            </div>
+            <div class="modal-actions">
+                <button class="cancel-btn" id="cancel-delete">Cancel</button>
+                <button class="delete-btn" id="confirm-delete">Delete</button>
             </div>
         </div>
     </div>
 
     <!-- Toast Container -->
-    <div id="toastContainer" class="toast-container"></div>
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay hidden" id="loading-overlay">
+        <div class="spinner"></div>
+        <p>Processing...</p>
+    </div>
 
     <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.0"></script>
     <script src="js/config.js"></script>
     <script src="js/admin.js"></script>
 </body>
