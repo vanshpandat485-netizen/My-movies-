@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>MovieFlix Admin Panel</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Appwrite SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/appwrite@14.0.0"></script>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-container">
+        <div class="login-card">
+            <h1 class="login-title">🔐 Admin Login</h1>
+            <p class="login-subtitle">Enter password to access the panel</p>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label class="form-label" for="password">Password</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        class="form-input" 
+                        placeholder="Enter admin password"
+                        required
+                        autocomplete="current-password"
+                    >
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    🚀 Access Panel
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div id="adminDashboard" class="admin-container">
+        <!-- Header -->
+        <header class="admin-header">
+            <div class="admin-header-content">
+                <h1 class="admin-title">
+                    <span>🎬</span>
+                    <span>MovieFlix Admin</span>
+                </h1>
+                <div class="admin-actions">
+                    <button id="refreshCacheBtn" class="btn btn-secondary btn-small">
+                        🔄 Force Refresh Cache
+                    </button>
+                    <button id="logoutBtn" class="btn btn-danger btn-small">
+                        🚪 Logout
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="admin-content">
+            <!-- Stats Section -->
+            <div class="card">
+                <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
+                    <div style="text-align: center; padding: 16px; background: var(--bg-primary); border-radius: 8px;">
+                        <div style="font-size: 2rem; font-weight: 700; color: var(--accent);" id="totalMovies">0</div>
+                        <div style="color: var(--text-secondary); font-size: 0.9rem;">Total Movies</div>
+                    </div>
+                    <div style="text-align: center; padding: 16px; background: var(--bg-primary); border-radius: 8px;">
+                        <div style="font-size: 2rem; font-weight: 700; color: var(--success);" id="cacheStatus">Active</div>
+                        <div style="color: var(--text-secondary); font-size: 0.9rem;">Cache Status</div>
+                    </div>
+                    <div style="text-align: center; padding: 16px; background: var(--bg-primary); border-radius: 8px;">
+                        <div style="font-size: 2rem; font-weight: 700; color: var(--warning);" id="lastUpdated">-</div>
+                        <div style="color: var(--text-secondary); font-size: 0.9rem;">Last Updated</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="movies">📽️ Movies</button>
+                <button class="tab-btn" data-tab="ads">📢 Advertisements</button>
+            </div>
+
+            <!-- Movies Tab -->
+            <div id="moviesTab" class="tab-content active">
+                <!-- Add Movie Form -->
+                <div class="card">
+                    <h3 class="card-title">➕ Add New Movie</h3>
+                    <form id="addMovieForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label" for="movieTitle">Title *</label>
+                                <input type="text" id="movieTitle" class="form-input" placeholder="Movie title" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="movieYear">Year</label>
+                                <input type="number" id="movieYear" class="form-input" placeholder="2024" min="1900" max="2100">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="movieRating">Rating</label>
+                                <input type="number" id="movieRating" class="form-input" placeholder="8.5" step="0.1" min="0" max="10">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="moviePoster">Poster URL *</label>
+                            <input type="url" id="moviePoster" class="form-input" placeholder="https://example.com/poster.jpg" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="movieDescription">Description</label>
+                            <textarea id="movieDescription" class="form-textarea" placeholder="Movie description/story..."></textarea>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label" for="download480p">480p Download Link</label>
+                                <input type="url" id="download480p" class="form-input" placeholder="https://shortener.com/...">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="download720p">720p Download Link</label>
+                                <input type="url" id="download720p" class="form-input" placeholder="https://shortener.com/...">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="download1080p">1080p Download Link</label>
+                                <input type="url" id="download1080p" class="form-input" placeholder="https://shortener.com/...">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="max-width: 200px;">
+                            ➕ Add Movie
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Movies Table -->
+                <div class="card">
+                    <h3 class="card-title">📋 All Movies</h3>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Poster</th>
+                                    <th>Title</th>
+                                    <th>Year</th>
+                                    <th>Rating</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="moviesTableBody">
+                                <tr>
+                                    <td colspan="5" style="text-align: center; padding: 40px;">
+                                        <div class="spinner"></div>
+                                        <p style="margin-top: 16px; color: var(--text-secondary);">Loading movies...</p>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ads Tab -->
+            <div id="adsTab" class="tab-content">
+                <!-- Banner Ad Settings -->
+                <div class="card">
+                    <h3 class="card-title">🖼️ Banner Ad Settings</h3>
+                    <form id="bannerAdForm">
+                        <div class="form-group">
+                            <label class="form-label" for="bannerImageUrl">Banner Image URL</label>
+                            <input type="url" id="bannerImageUrl" class="form-input" placeholder="https://example.com/banner.jpg">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="bannerTargetUrl">Banner Target Link</label>
+                            <input type="url" id="bannerTargetUrl" class="form-input" placeholder="https://advertiser.com/offer">
+                        </div>
+                        <div class="preview-box">
+                            <p style="margin-bottom: 12px; color: var(--text-secondary);">Preview:</p>
+                            <img id="bannerPreview" class="preview-image" src="" alt="Banner Preview" style="display: none;">
+                            <p id="bannerNoPreview" style="color: var(--text-muted);">No banner image set</p>
+                        </div>
+                        <button type="submit" class="btn btn-success" style="max-width: 200px; margin-top: 16px;">
+                            💾 Save Banner Ad
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Interstitial Ad Settings -->
+                <div class="card">
+                    <h3 class="card-title">📱 Interstitial Ad Settings</h3>
+                    <form id="interstitialAdForm">
+                        <div class="form-group">
+                            <label class="form-label" for="interstitialImageUrl">Interstitial Image URL</label>
+                            <input type="url" id="interstitialImageUrl" class="form-input" placeholder="https://example.com/interstitial.jpg">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="interstitialTargetUrl">Interstitial Target Link</label>
+                            <input type="url" id="interstitialTargetUrl" class="form-input" placeholder="https://advertiser.com/offer">
+                        </div>
+                        <div class="preview-box">
+                            <p style="margin-bottom: 12px; color: var(--text-secondary);">Preview:</p>
+                            <img id="interstitialPreview" class="preview-image" src="" alt="Interstitial Preview" style="display: none;">
+                            <p id="interstitialNoPreview" style="color: var(--text-muted);">No interstitial image set</p>
+                        </div>
+                        <button type="submit" class="btn btn-success" style="max-width: 200px; margin-top: 16px;">
+                            💾 Save Interstitial Ad
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Movie Modal -->
+    <div id="editModal" class="interstitial-overlay">
+        <div class="interstitial-content" style="max-width: 600px; max-height: 90vh; overflow-y: auto;">
+            <button id="closeEditModal" class="interstitial-close" style="position: sticky; top: 0;">✕</button>
+            <div style="padding: 24px;">
+                <h3 style="margin-bottom: 20px;">✏️ Edit Movie</h3>
+                <form id="editMovieForm">
+                    <input type="hidden" id="editMovieId">
+                    <div class="form-group">
+                        <label class="form-label" for="editTitle">Title *</label>
+                        <input type="text" id="editTitle" class="form-input" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="editYear">Year</label>
+                            <input type="number" id="editYear" class="form-input" min="1900" max="2100">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="editRating">Rating</label>
+                            <input type="number" id="editRating" class="form-input" step="0.1" min="0" max="10">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="editPoster">Poster URL *</label>
+                        <input type="url" id="editPoster" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="editDescription">Description</label>
+                        <textarea id="editDescription" class="form-textarea"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="editDownload480p">480p Link</label>
+                        <input type="url" id="editDownload480p" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="editDownload720p">720p Link</label>
+                        <input type="url" id="editDownload720p" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="editDownload1080p">1080p Link</label>
+                        <input type="url" id="editDownload1080p" class="form-input">
+                    </div>
+                    <div style="display: flex; gap: 12px;">
+                        <button type="submit" class="btn btn-success">💾 Update</button>
+                        <button type="button" id="cancelEditBtn" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="js/config.js"></script>
+    <script src="js/admin.js"></script>
+</body>
+</html>
