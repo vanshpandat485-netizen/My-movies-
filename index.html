@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#121212">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Filmymaxz - Stream & Download</title>
+    <title>FilmyMaxz - Movies Hub</title>
     <link rel="stylesheet" href="css/styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -19,21 +19,23 @@
             <div class="logo-animation">
                 <i class="fas fa-film"></i>
             </div>
-            <h1>Filmymaxz</h1>
+            <h1>FilmyMaxz</h1>
             <div class="loading-bar">
                 <div class="loading-progress"></div>
             </div>
+            <p class="splash-text">Loading movies...</p>
         </div>
     </div>
 
     <!-- Main App Container -->
     <div id="app-container" class="app-container hidden">
+        
         <!-- Header with Sticky Search -->
         <header class="sticky-header">
             <div class="header-top">
                 <div class="logo">
                     <i class="fas fa-film"></i>
-                    <span>Filmymaxz</span>
+                    <span>FilmyMaxz</span>
                 </div>
                 <button class="refresh-btn" id="refresh-btn" title="Refresh">
                     <i class="fas fa-sync-alt"></i>
@@ -50,12 +52,13 @@
 
         <!-- Home View -->
         <main id="home-view" class="main-content">
+            
             <!-- Banner Ad Section -->
-            <section class="banner-ad-container" id="banner-ad-container">
-                <a href="#" id="banner-ad-link" target="_blank" rel="noopener">
+            <section class="banner-ad-container hidden" id="banner-ad-container">
+                <div class="banner-ad-wrapper" id="banner-ad-wrapper">
                     <img id="banner-ad-image" src="" alt="Advertisement">
                     <span class="ad-label">AD</span>
-                </a>
+                </div>
             </section>
 
             <!-- Categories Filter -->
@@ -67,13 +70,15 @@
                     <button class="category-btn" data-category="comedy">Comedy</button>
                     <button class="category-btn" data-category="horror">Horror</button>
                     <button class="category-btn" data-category="sci-fi">Sci-Fi</button>
+                    <button class="category-btn" data-category="romance">Romance</button>
+                    <button class="category-btn" data-category="thriller">Thriller</button>
                 </div>
             </section>
 
             <!-- Movie Grid -->
             <section class="movies-section">
                 <h2 class="section-title">
-                    <i class="fas fa-fire"></i> Trending Movies
+                    <i class="fas fa-fire"></i> <span id="section-title-text">Trending Movies</span>
                 </h2>
                 <div class="movie-grid" id="movie-grid">
                     <!-- Movies will be loaded here dynamically -->
@@ -85,7 +90,7 @@
             </section>
 
             <!-- Loading Skeleton -->
-            <div class="skeleton-loader hidden" id="skeleton-loader">
+            <div class="skeleton-loader" id="skeleton-loader">
                 <div class="skeleton-card"></div>
                 <div class="skeleton-card"></div>
                 <div class="skeleton-card"></div>
@@ -93,6 +98,7 @@
                 <div class="skeleton-card"></div>
                 <div class="skeleton-card"></div>
             </div>
+
         </main>
 
         <!-- Movie Detail View -->
@@ -126,7 +132,7 @@
                         <span class="quality">
                             <i class="fas fa-hd"></i> HD
                         </span>
-                        <span class="duration">
+                        <span class="duration" id="detail-duration">
                             <i class="fas fa-clock"></i> 2h 15m
                         </span>
                     </div>
@@ -138,7 +144,7 @@
 
                     <div class="download-section">
                         <h3><i class="fas fa-download"></i> Download Links</h3>
-                        <p class="download-notice">Click to get download link</p>
+                        <p class="download-notice">Click quality to get download link</p>
                         <div class="download-buttons">
                             <button class="download-btn btn-480p" id="btn-480p" data-quality="480p">
                                 <i class="fas fa-download"></i>
@@ -162,12 +168,13 @@
         </div>
 
         <!-- Permanent Footer Poster Ad -->
-        <div class="permanent-poster-ad" id="permanent-poster-ad">
-            <a href="#" id="permanent-poster-link" target="_blank" rel="noopener">
+        <div class="permanent-poster-ad hidden" id="permanent-poster-ad">
+            <div class="permanent-poster-wrapper" id="permanent-poster-wrapper">
                 <img id="permanent-poster-image" src="" alt="Special Offer">
                 <span class="ad-badge">Sponsored</span>
-            </a>
+            </div>
         </div>
+
     </div>
 
     <!-- Interstitial Ad Overlay -->
@@ -175,24 +182,15 @@
         <div class="interstitial-content">
             <div class="interstitial-header">
                 <span class="ad-notice">Advertisement</span>
-                <button class="close-interstitial disabled" id="close-interstitial">
+                <button class="close-interstitial" id="close-interstitial">
                     <span class="countdown" id="countdown">5</span>
-                    <i class="fas fa-times hidden" id="close-icon"></i>
                 </button>
             </div>
-            <a href="#" id="interstitial-link" target="_blank" rel="noopener">
+            <div class="interstitial-image-container" id="interstitial-image-container">
                 <img id="interstitial-image" src="" alt="Advertisement">
-            </a>
-            <p class="skip-notice">Wait <span id="skip-timer">5</span> seconds to continue</p>
+            </div>
+            <p class="skip-notice" id="skip-notice">Wait <span id="skip-timer">5</span> seconds to continue</p>
         </div>
-    </div>
-
-    <!-- Pull to Refresh Indicator -->
-    <div class="pull-to-refresh" id="pull-refresh">
-        <div class="pull-icon">
-            <i class="fas fa-arrow-down"></i>
-        </div>
-        <span>Pull to refresh</span>
     </div>
 
     <!-- Toast Notification -->
@@ -202,6 +200,18 @@
     <div class="network-status hidden" id="network-status">
         <i class="fas fa-wifi-slash"></i>
         <span>No Internet Connection</span>
+    </div>
+
+    <!-- Error Screen -->
+    <div class="error-screen hidden" id="error-screen">
+        <div class="error-content">
+            <i class="fas fa-exclamation-triangle"></i>
+            <h2>Connection Error</h2>
+            <p>Unable to load movies. Please check your internet connection.</p>
+            <button class="retry-btn" id="retry-btn">
+                <i class="fas fa-redo"></i> Retry
+            </button>
+        </div>
     </div>
 
     <!-- Scripts -->
