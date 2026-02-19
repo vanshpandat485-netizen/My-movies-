@@ -1,48 +1,71 @@
-// js/script.js - User Frontend Logic
+// js/script.js - HopWeb Compatible Movie App
 
 class MovieApp {
     constructor() {
+        // Data
         this.movies = [];
         this.filteredMovies = [];
         this.appConfig = null;
         this.currentMovie = null;
         this.downloadLinks = {};
-        this.isRefreshing = false;
         
+        // State
+        this.isRefreshing = false;
+        this.isLoading = false;
+        
+        // Interstitial State
+        this.pendingDownloadLink = null;
+        this.pendingDownloadQuality = null;
+        this.countdownTimer = null;
+        this.countdownValue = 5;
+        this.canCloseInterstitial = false;
+        
+        // Initialize
         this.init();
     }
 
     async init() {
-        this.bindElements();
-        this.bindEvents();
-        await this.loadData();
-        this.setupPullToRefresh();
-        this.setupNetworkListener();
-        this.hideSplashScreen();
+        try {
+            this.bindElements();
+            this.bindEvents();
+            this.setupNetworkListener();
+            await this.loadData();
+            this.hideSplashScreen();
+        } catch (error) {
+            console.error('Init error:', error);
+            this.showErrorScreen();
+        }
     }
 
+    // ============================================
+    // ELEMENT BINDINGS
+    // ============================================
+
     bindElements() {
-        // Splash screen
+        // Splash & Error Screens
         this.splashScreen = document.getElementById('splash-screen');
         this.appContainer = document.getElementById('app-container');
+        this.errorScreen = document.getElementById('error-screen');
+        this.retryBtn = document.getElementById('retry-btn');
         
         // Header
         this.searchInput = document.getElementById('search-input');
         this.clearSearchBtn = document.getElementById('clear-search');
         this.refreshBtn = document.getElementById('refresh-btn');
         
-        // Home view
+        // Home View
         this.homeView = document.getElementById('home-view');
         this.movieGrid = document.getElementById('movie-grid');
         this.noResults = document.getElementById('no-results');
         this.skeletonLoader = document.getElementById('skeleton-loader');
+        this.sectionTitleText = document.getElementById('section-title-text');
         
-        // Banner ad
+        // Banner Ad
         this.bannerAdContainer = document.getElementById('banner-ad-container');
+        this.bannerAdWrapper = document.getElementById('banner-ad-wrapper');
         this.bannerAdImage = document.getElementById('banner-ad-image');
-        this.bannerAdLink = document.getElementById('banner-ad-link');
         
-        // Detail view
+        // Detail View
         this.detailView = document.getElementById('detail-view');
         this.backBtn = document.getElementById('back-btn');
         this.shareBtn = document.getElementById('share-btn');
@@ -50,25 +73,27 @@ class MovieApp {
         this.detailPoster = document.getElementById('detail-poster');
         this.detailRating = document.getElementById('detail-rating');
         this.detailYear = document.getElementById('detail-year');
+        this.detailDuration = document.getElementById('detail-duration');
         this.detailDescription = document.getElementById('detail-description');
-        this.downloadBtns = document.querySelectorAll('.download-btn');
         
-        // Interstitial ad
+        // Download Buttons
+        this.btn480p = document.getElementById('btn-480p');
+        this.btn720p = document.getElementById('btn-720p');
+        this.btn1080p = document.getElementById('btn-1080p');
+        
+        // Interstitial Ad
         this.interstitialOverlay = document.getElementById('interstitial-overlay');
+        this.interstitialImageContainer = document.getElementById('interstitial-image-container');
         this.interstitialImage = document.getElementById('interstitial-image');
-        this.interstitialLink = document.getElementById('interstitial-link');
         this.closeInterstitialBtn = document.getElementById('close-interstitial');
         this.countdownEl = document.getElementById('countdown');
-        this.closeIcon = document.getElementById('close-icon');
+        this.skipNotice = document.getElementById('skip-notice');
         this.skipTimer = document.getElementById('skip-timer');
         
-        // Permanent poster ad
+        // Permanent Poster Ad
         this.permanentPosterAd = document.getElementById('permanent-poster-ad');
+        this.permanentPosterWrapper = document.getElementById('permanent-poster-wrapper');
         this.permanentPosterImage = document.getElementById('permanent-poster-image');
-        this.permanentPosterLink = document.getElementById('permanent-poster-link');
-        
-        // Pull to refresh
-        this.pullRefresh = document.getElementById('pull-refresh');
         
         // Toast & Network
         this.toastContainer = document.getElementById('toast-container');
@@ -78,6 +103,10 @@ class MovieApp {
         this.categoryBtns = document.querySelectorAll('.category-btn');
     }
 
+    // ============================================
+    // EVENT BINDINGS
+    // ============================================
+
     bindEvents() {
         // Search
         this.searchInput.addEventListener('input', (e) => this.handleSearch(e.target.value));
@@ -86,51 +115,69 @@ class MovieApp {
         // Refresh
         this.refreshBtn.addEventListener('click', () => this.refreshData());
         
-        // Back button
+        // Retry
+        this.retryBtn.addEventListener('click', () => this.retryLoad());
+        
+        // Back Button
         this.backBtn.addEventListener('click', () => this.hideDetailView());
         
-        // Share button
+        // Share Button
         this.shareBtn.addEventListener('click', () => this.shareMovie());
         
-        // Download buttons
-        this.downloadBtns.forEach(btn => {
-            btn.addEventListener('click', (e) => this.handleDownload(e.target.closest('.download-btn').dataset.quality));
-        });
+        // Download Buttons
+        this.btn480p.addEventListener('click', () => this.handleDownload('480p'));
+        this.btn720p.addEventListener('click', () => this.handleDownload('720p'));
+        this.btn1080p.addEventListener('click', () => this.handleDownload('1080p'));
         
-        // Close interstitial
+        // Interstitial Close
         this.closeInterstitialBtn.addEventListener('click', () => this.closeInterstitial());
         
-        // Category buttons
+        // Interstitial Ad Click
+        this.interstitialImageContainer.addEventListener('click', () => this.handleInterstitialClick());
+        
+        // Banner Ad Click
+        this.bannerAdWrapper.addEventListener('click', () => this.handleBannerAdClick());
+        
+        // Permanent Poster Ad Click
+        this.permanentPosterWrapper.addEventListener('click', () => this.handlePosterAdClick());
+        
+        // Category Buttons
         this.categoryBtns.forEach(btn => {
             btn.addEventListener('click', (e) => this.filterByCategory(e.target.dataset.category));
         });
         
-        // Handle browser back button
-        window.addEventListener('popstate', (e) => {
-            if (this.detailView && !this.detailView.classList.contains('hidden')) {
-                this.hideDetailView();
-            }
-        });
+        // Hardware Back Button (Android)
+        document.addEventListener('backbutton', (e) => this.handleBackButton(e), false);
+        
+        // Also listen for popstate
+        window.addEventListener('popstate', () => this.handleBackButton());
     }
 
     // ============================================
-    // DATA LOADING & CACHING
+    // DATA LOADING
     // ============================================
 
     async loadData() {
         try {
             this.showSkeletonLoader();
             
-            // Check if cache is still valid
+            // Check cache first
             if (this.isCacheValid()) {
-                this.movies = this.getCachedMovies();
-                this.showToast('Loaded from cache', 'info');
-            } else {
-                // Fetch fresh data from Appwrite
-                await this.fetchMoviesFromAppwrite();
+                const cachedMovies = this.getCachedMovies();
+                if (cachedMovies.length > 0) {
+                    this.movies = cachedMovies;
+                    this.filteredMovies = [...this.movies];
+                    this.renderMovies();
+                    this.hideSkeletonLoader();
+                    
+                    // Load app config in background
+                    this.loadAppConfig();
+                    return;
+                }
             }
             
-            // Load app config (ads settings)
+            // Fetch fresh data
+            await this.fetchMoviesFromAppwrite();
             await this.loadAppConfig();
             
             this.filteredMovies = [...this.movies];
@@ -139,37 +186,36 @@ class MovieApp {
             
         } catch (error) {
             console.error('Error loading data:', error);
-            this.showToast('Failed to load movies', 'error');
             
-            // Try to use cached data if available
+            // Try cached data
             const cachedMovies = this.getCachedMovies();
             if (cachedMovies.length > 0) {
                 this.movies = cachedMovies;
                 this.filteredMovies = [...this.movies];
                 this.renderMovies();
-                this.showToast('Showing cached data', 'warning');
+                this.hideSkeletonLoader();
+                this.showToast('Showing offline data', 'warning');
+            } else {
+                this.hideSkeletonLoader();
+                this.showErrorScreen();
             }
-            this.hideSkeletonLoader();
         }
     }
 
     isCacheValid() {
         const timestamp = localStorage.getItem(AppConfig.cacheKeys.moviesTimestamp);
-        const cacheVersion = localStorage.getItem(AppConfig.cacheKeys.cacheVersion);
         const cachedData = localStorage.getItem(AppConfig.cacheKeys.movies);
         
         if (!timestamp || !cachedData) return false;
         
-        const now = Date.now();
-        const cacheAge = now - parseInt(timestamp);
-        
-        // Check if cache is older than 3 hours
+        const cacheAge = Date.now() - parseInt(timestamp);
         if (cacheAge > AppConfig.cacheDuration) return false;
         
-        // Check if cache version matches (for admin-forced refresh)
+        // Check cache version
         const storedVersion = localStorage.getItem('stored_cache_version');
-        if (cacheVersion && storedVersion !== cacheVersion) {
-            localStorage.setItem('stored_cache_version', cacheVersion);
+        const serverVersion = localStorage.getItem(AppConfig.cacheKeys.cacheVersion);
+        
+        if (serverVersion && storedVersion !== serverVersion) {
             return false;
         }
         
@@ -181,7 +227,7 @@ class MovieApp {
             const cachedData = localStorage.getItem(AppConfig.cacheKeys.movies);
             return cachedData ? JSON.parse(cachedData) : [];
         } catch (error) {
-            console.error('Error parsing cached movies:', error);
+            console.error('Cache parse error:', error);
             return [];
         }
     }
@@ -191,42 +237,35 @@ class MovieApp {
             localStorage.setItem(AppConfig.cacheKeys.movies, JSON.stringify(movies));
             localStorage.setItem(AppConfig.cacheKeys.moviesTimestamp, Date.now().toString());
         } catch (error) {
-            console.error('Error caching movies:', error);
+            console.error('Cache save error:', error);
         }
     }
 
     async fetchMoviesFromAppwrite() {
-        try {
-            const response = await databases.listDocuments(
-                AppConfig.databaseId,
-                AppConfig.collections.movies,
-                [
-                    Appwrite.Query.orderDesc('$createdAt'),
-                    Appwrite.Query.limit(100)
-                ]
-            );
-            
-            this.movies = response.documents.map(doc => ({
-                id: doc.$id,
-                title: doc.title,
-                description: doc.description,
-                poster_url: doc.poster_url,
-                rating: doc.rating,
-                year: doc.year,
-                category: doc.category || 'action',
-                duration: doc.duration || '2h',
-                download_480p: doc.download_480p,
-                download_720p: doc.download_720p,
-                download_1080p: doc.download_1080p
-            }));
-            
-            // Cache the movies
-            this.cacheMovies(this.movies);
-            
-        } catch (error) {
-            console.error('Error fetching movies from Appwrite:', error);
-            throw error;
-        }
+        const response = await databases.listDocuments(
+            AppConfig.databaseId,
+            AppConfig.collections.movies,
+            [
+                Appwrite.Query.orderDesc('$createdAt'),
+                Appwrite.Query.limit(100)
+            ]
+        );
+        
+        this.movies = response.documents.map(doc => ({
+            id: doc.$id,
+            title: doc.title || '',
+            description: doc.description || '',
+            poster_url: doc.poster_url || '',
+            rating: doc.rating || 0,
+            year: doc.year || '',
+            category: doc.category || 'action',
+            duration: doc.duration || '',
+            download_480p: doc.download_480p || '',
+            download_720p: doc.download_720p || '',
+            download_1080p: doc.download_1080p || ''
+        }));
+        
+        this.cacheMovies(this.movies);
     }
 
     async loadAppConfig() {
@@ -241,13 +280,16 @@ class MovieApp {
                 this.appConfig = response.documents[0];
                 this.setupAds();
                 
-                // Store cache version
+                // Update cache version
                 if (this.appConfig.cache_version) {
-                    localStorage.setItem(AppConfig.cacheKeys.cacheVersion, this.appConfig.cache_version);
+                    const storedVersion = localStorage.getItem('stored_cache_version');
+                    if (storedVersion !== this.appConfig.cache_version) {
+                        localStorage.setItem('stored_cache_version', this.appConfig.cache_version);
+                    }
                 }
             }
         } catch (error) {
-            console.error('Error loading app config:', error);
+            console.error('App config load error:', error);
         }
     }
 
@@ -255,24 +297,21 @@ class MovieApp {
         if (!this.appConfig) return;
         
         // Banner Ad
-        if (this.appConfig.banner_image_url) {
+        if (this.appConfig.banner_image_url && this.appConfig.banner_image_url.trim() !== '') {
             this.bannerAdImage.src = this.appConfig.banner_image_url;
-            this.bannerAdLink.href = this.appConfig.banner_target_url || '#';
             this.bannerAdContainer.classList.remove('hidden');
         } else {
             this.bannerAdContainer.classList.add('hidden');
         }
         
         // Interstitial Ad
-        if (this.appConfig.interstitial_image_url) {
+        if (this.appConfig.interstitial_image_url && this.appConfig.interstitial_image_url.trim() !== '') {
             this.interstitialImage.src = this.appConfig.interstitial_image_url;
-            this.interstitialLink.href = this.appConfig.interstitial_target_url || '#';
         }
         
         // Permanent Poster Ad
-        if (this.appConfig.poster_image_url) {
+        if (this.appConfig.poster_image_url && this.appConfig.poster_image_url.trim() !== '') {
             this.permanentPosterImage.src = this.appConfig.poster_image_url;
-            this.permanentPosterLink.href = this.appConfig.poster_target_url || '#';
             this.permanentPosterAd.classList.remove('hidden');
         } else {
             this.permanentPosterAd.classList.add('hidden');
@@ -297,19 +336,30 @@ class MovieApp {
             this.filteredMovies = [...this.movies];
             this.renderMovies();
             
-            this.showToast('Data refreshed successfully', 'success');
-            
+            this.showToast('Refreshed successfully', 'success');
         } catch (error) {
-            console.error('Error refreshing data:', error);
-            this.showToast('Failed to refresh data', 'error');
+            console.error('Refresh error:', error);
+            this.showToast('Failed to refresh', 'error');
         } finally {
             this.isRefreshing = false;
             this.refreshBtn.classList.remove('spinning');
         }
     }
 
+    retryLoad() {
+        this.errorScreen.classList.add('hidden');
+        this.splashScreen.classList.remove('hidden');
+        this.splashScreen.classList.remove('fade-out');
+        
+        setTimeout(() => {
+            this.loadData().then(() => {
+                this.hideSplashScreen();
+            });
+        }, 500);
+    }
+
     // ============================================
-    // SEARCH FUNCTIONALITY
+    // SEARCH & FILTER
     // ============================================
 
     handleSearch(query) {
@@ -318,12 +368,14 @@ class MovieApp {
         if (query === '') {
             this.clearSearchBtn.classList.add('hidden');
             this.filteredMovies = [...this.movies];
+            this.sectionTitleText.textContent = 'Trending Movies';
         } else {
             this.clearSearchBtn.classList.remove('hidden');
-            this.filteredMovies = this.movies.filter(movie => 
+            this.filteredMovies = this.movies.filter(movie =>
                 movie.title.toLowerCase().includes(query) ||
                 (movie.description && movie.description.toLowerCase().includes(query))
             );
+            this.sectionTitleText.textContent = `Search: "${query}"`;
         }
         
         this.renderMovies();
@@ -333,19 +385,34 @@ class MovieApp {
         this.searchInput.value = '';
         this.clearSearchBtn.classList.add('hidden');
         this.filteredMovies = [...this.movies];
+        this.sectionTitleText.textContent = 'Trending Movies';
         this.renderMovies();
+        
+        // Reset category
+        this.categoryBtns.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.category === 'all');
+        });
     }
 
     filterByCategory(category) {
-        this.categoryBtns.forEach(btn => btn.classList.remove('active'));
-        document.querySelector(`[data-category="${category}"]`).classList.add('active');
+        // Clear search
+        this.searchInput.value = '';
+        this.clearSearchBtn.classList.add('hidden');
         
+        // Update active category
+        this.categoryBtns.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.category === category);
+        });
+        
+        // Filter movies
         if (category === 'all') {
             this.filteredMovies = [...this.movies];
+            this.sectionTitleText.textContent = 'Trending Movies';
         } else {
-            this.filteredMovies = this.movies.filter(movie => 
+            this.filteredMovies = this.movies.filter(movie =>
                 movie.category && movie.category.toLowerCase() === category.toLowerCase()
             );
+            this.sectionTitleText.textContent = category.charAt(0).toUpperCase() + category.slice(1) + ' Movies';
         }
         
         this.renderMovies();
@@ -365,10 +432,10 @@ class MovieApp {
         this.noResults.classList.add('hidden');
         
         this.movieGrid.innerHTML = this.filteredMovies.map(movie => `
-            <div class="movie-card" data-id="${movie.id}" onclick="app.showDetailView('${movie.id}')">
+            <div class="movie-card" data-id="${movie.id}">
                 <div class="movie-poster">
-                    <img src="${movie.poster_url}" alt="${movie.title}" loading="lazy" 
-                         onerror="this.src='https://via.placeholder.com/300x450?text=No+Poster'">
+                    <img src="${movie.poster_url}" alt="${movie.title}" loading="lazy"
+                         onerror="this.src='https://via.placeholder.com/300x450/1a1a1a/666?text=No+Poster'">
                     <div class="poster-rating">
                         <i class="fas fa-star"></i>
                         <span>${movie.rating || 'N/A'}</span>
@@ -376,10 +443,18 @@ class MovieApp {
                 </div>
                 <div class="movie-info">
                     <h3 class="movie-title">${movie.title}</h3>
-                    <span class="movie-year">${movie.year || 'N/A'}</span>
+                    <span class="movie-year">${movie.year || ''}</span>
                 </div>
             </div>
         `).join('');
+        
+        // Add click events to movie cards
+        document.querySelectorAll('.movie-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const movieId = card.dataset.id;
+                this.showDetailView(movieId);
+            });
+        });
     }
 
     // ============================================
@@ -394,22 +469,29 @@ class MovieApp {
             return;
         }
         
-        // Update URL without reloading
-        history.pushState({ movieId }, '', `#movie=${movieId}`);
-        
         // Populate detail view
         this.detailTitle.textContent = this.currentMovie.title;
         this.detailPoster.src = this.currentMovie.poster_url;
+        this.detailPoster.onerror = () => {
+            this.detailPoster.src = 'https://via.placeholder.com/300x450/1a1a1a/666?text=No+Poster';
+        };
+        
         this.detailRating.querySelector('span').textContent = this.currentMovie.rating || 'N/A';
         this.detailYear.innerHTML = `<i class="fas fa-calendar"></i> ${this.currentMovie.year || 'N/A'}`;
+        this.detailDuration.innerHTML = `<i class="fas fa-clock"></i> ${this.currentMovie.duration || 'N/A'}`;
         this.detailDescription.textContent = this.currentMovie.description || 'No description available.';
         
         // Store download links
         this.downloadLinks = {
-            '480p': this.currentMovie.download_480p,
-            '720p': this.currentMovie.download_720p,
-            '1080p': this.currentMovie.download_1080p
+            '480p': this.currentMovie.download_480p || '',
+            '720p': this.currentMovie.download_720p || '',
+            '1080p': this.currentMovie.download_1080p || ''
         };
+        
+        // Update button states
+        this.btn480p.disabled = !this.downloadLinks['480p'];
+        this.btn720p.disabled = !this.downloadLinks['720p'];
+        this.btn1080p.disabled = !this.downloadLinks['1080p'];
         
         // Show detail view
         this.homeView.classList.add('hidden');
@@ -417,6 +499,9 @@ class MovieApp {
         
         // Scroll to top
         window.scrollTo(0, 0);
+        
+        // Push history state for back button
+        history.pushState({ view: 'detail', movieId: movieId }, '');
     }
 
     hideDetailView() {
@@ -426,93 +511,127 @@ class MovieApp {
             this.detailView.classList.add('hidden');
             this.detailView.classList.remove('slide-out');
             this.homeView.classList.remove('hidden');
-            
-            // Update URL
-            history.pushState({}, '', window.location.pathname);
+            this.currentMovie = null;
         }, 300);
+    }
+
+    handleBackButton(e) {
+        if (this.interstitialOverlay && !this.interstitialOverlay.classList.contains('hidden')) {
+            // Close interstitial if open
+            if (this.canCloseInterstitial) {
+                this.closeInterstitial();
+            }
+            if (e) e.preventDefault();
+            return;
+        }
+        
+        if (this.detailView && !this.detailView.classList.contains('hidden')) {
+            // Close detail view
+            this.hideDetailView();
+            if (e) e.preventDefault();
+            return;
+        }
     }
 
     shareMovie() {
         if (!this.currentMovie) return;
         
+        const shareText = `Check out "${this.currentMovie.title}" on ${AppConfig.appName}!`;
+        
         if (navigator.share) {
             navigator.share({
                 title: this.currentMovie.title,
-                text: `Check out ${this.currentMovie.title} on MovieFlix!`,
+                text: shareText,
                 url: window.location.href
-            }).catch(err => console.log('Share failed:', err));
+            }).catch(err => console.log('Share error:', err));
         } else {
             // Fallback: copy to clipboard
-            navigator.clipboard.writeText(window.location.href)
-                .then(() => this.showToast('Link copied to clipboard!', 'success'))
-                .catch(() => this.showToast('Failed to copy link', 'error'));
+            const textArea = document.createElement('textarea');
+            textArea.value = shareText;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            this.showToast('Link copied to clipboard!', 'success');
         }
     }
 
     // ============================================
-    // DOWNLOAD & INTERSTITIAL AD
+    // DOWNLOAD & INTERSTITIAL
     // ============================================
 
     handleDownload(quality) {
         const link = this.downloadLinks[quality];
         
-        if (!link) {
+        if (!link || link.trim() === '') {
             this.showToast(`${quality} download not available`, 'warning');
             return;
         }
         
-        // Store the quality for after ad closes
+        // Store pending download
+        this.pendingDownloadLink = link;
         this.pendingDownloadQuality = quality;
         
-        // Show interstitial ad
-        this.showInterstitialAd();
+        // Check if interstitial is configured
+        if (this.appConfig && 
+            this.appConfig.interstitial_image_url && 
+            this.appConfig.interstitial_image_url.trim() !== '') {
+            // Show interstitial ad
+            this.showInterstitialAd();
+        } else {
+            // No interstitial, proceed directly
+            this.proceedToDownload();
+        }
     }
 
     showInterstitialAd() {
-        // Check if interstitial is configured
-        if (!this.appConfig || !this.appConfig.interstitial_image_url) {
-            // No interstitial configured, proceed directly to download
-            this.proceedToDownload();
-            return;
-        }
+        // Reset state
+        this.canCloseInterstitial = false;
+        this.countdownValue = 5;
+        
+        // Update UI
+        this.countdownEl.textContent = this.countdownValue;
+        this.countdownEl.classList.remove('close-ready');
+        this.skipTimer.textContent = this.countdownValue;
+        this.skipNotice.classList.remove('hidden');
         
         // Show overlay
         this.interstitialOverlay.classList.remove('hidden');
         
-        // Reset countdown
-        let countdown = 5;
-        this.countdownEl.textContent = countdown;
-        this.countdownEl.classList.remove('hidden');
-        this.closeIcon.classList.add('hidden');
-        this.closeInterstitialBtn.classList.add('disabled');
-        this.skipTimer.textContent = countdown;
+        // Clear any existing timer
+        if (this.countdownTimer) {
+            clearInterval(this.countdownTimer);
+        }
         
         // Start countdown
-        const timer = setInterval(() => {
-            countdown--;
-            this.countdownEl.textContent = countdown;
-            this.skipTimer.textContent = countdown;
+        this.countdownTimer = setInterval(() => {
+            this.countdownValue--;
+            this.countdownEl.textContent = this.countdownValue;
+            this.skipTimer.textContent = this.countdownValue;
             
-            if (countdown <= 0) {
-                clearInterval(timer);
-                this.countdownEl.classList.add('hidden');
-                this.closeIcon.classList.remove('hidden');
-                this.closeInterstitialBtn.classList.remove('disabled');
+            if (this.countdownValue <= 0) {
+                clearInterval(this.countdownTimer);
+                this.countdownTimer = null;
+                this.canCloseInterstitial = true;
+                
+                // Update close button
+                this.countdownEl.innerHTML = '<i class="fas fa-times"></i>';
+                this.countdownEl.classList.add('close-ready');
+                this.skipNotice.innerHTML = '<span style="color: #4CAF50;">Tap X to continue</span>';
             }
         }, 1000);
-        
-        // Store timer reference for cleanup
-        this.countdownTimer = timer;
     }
 
     closeInterstitial() {
-        if (this.closeInterstitialBtn.classList.contains('disabled')) {
+        if (!this.canCloseInterstitial) {
+            this.showToast(`Wait ${this.countdownValue} seconds`, 'info');
             return;
         }
         
-        // Clear timer if still running
+        // Clear timer
         if (this.countdownTimer) {
             clearInterval(this.countdownTimer);
+            this.countdownTimer = null;
         }
         
         // Hide overlay
@@ -522,48 +641,98 @@ class MovieApp {
         this.proceedToDownload();
     }
 
+    handleInterstitialClick() {
+        // Open interstitial ad link
+        if (this.appConfig && this.appConfig.interstitial_target_url) {
+            this.openExternalLink(this.appConfig.interstitial_target_url);
+        }
+    }
+
     proceedToDownload() {
+        const link = this.pendingDownloadLink;
         const quality = this.pendingDownloadQuality;
-        const link = this.downloadLinks[quality];
         
-        if (link) {
-            // Open link in new tab
-            window.open(link, '_blank', 'noopener,noreferrer');
-            this.showToast(`Opening ${quality} download link...`, 'success');
+        if (link && link.trim() !== '') {
+            this.showToast(`Opening ${quality} download...`, 'success');
+            
+            // Small delay to show toast
+            setTimeout(() => {
+                this.openExternalLink(link);
+            }, 500);
         }
         
-        // Clear pending download
+        // Clear pending
+        this.pendingDownloadLink = null;
         this.pendingDownloadQuality = null;
     }
 
     // ============================================
-    // PULL TO REFRESH
+    // AD CLICK HANDLERS
     // ============================================
 
-    setupPullToRefresh() {
-        let startY = 0;
-        let pulling = false;
+    handleBannerAdClick() {
+        if (this.appConfig && this.appConfig.banner_target_url) {
+            this.openExternalLink(this.appConfig.banner_target_url);
+        }
+    }
+
+    handlePosterAdClick() {
+        if (this.appConfig && this.appConfig.poster_target_url) {
+            this.openExternalLink(this.appConfig.poster_target_url);
+        }
+    }
+
+    // ============================================
+    // EXTERNAL LINK HANDLER (HopWeb Compatible)
+    // ============================================
+
+    openExternalLink(url) {
+        if (!url || url.trim() === '' || url === '#') {
+            return;
+        }
         
-        document.addEventListener('touchstart', (e) => {
-            if (window.scrollY === 0) {
-                startY = e.touches[0].clientY;
+        try {
+            // Method 1: HopWeb API
+            if (typeof HopWeb !== 'undefined' && HopWeb.openUrl) {
+                HopWeb.openUrl(url);
+                return;
             }
-        }, { passive: true });
-        
-        document.addEventListener('touchmove', (e) => {
-            if (window.scrollY === 0 && e.touches[0].clientY > startY + 50) {
-                pulling = true;
-                this.pullRefresh.classList.add('visible');
+            
+            // Method 2: Android WebView Interface
+            if (typeof Android !== 'undefined' && Android.openExternalLink) {
+                Android.openExternalLink(url);
+                return;
             }
-        }, { passive: true });
-        
-        document.addEventListener('touchend', () => {
-            if (pulling) {
-                pulling = false;
-                this.pullRefresh.classList.remove('visible');
-                this.refreshData();
+            
+            // Method 3: WebView loadUrl
+            if (typeof Android !== 'undefined' && Android.loadUrl) {
+                Android.loadUrl(url);
+                return;
             }
-        });
+            
+            // Method 4: Window location (for web browsers and some WebViews)
+            // Use a hidden iframe to prevent app from closing
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = url;
+            document.body.appendChild(iframe);
+            
+            // Also try window.open
+            setTimeout(() => {
+                const newWindow = window.open(url, '_system');
+                if (!newWindow) {
+                    // If popup blocked, use location
+                    window.location.href = url;
+                }
+                // Remove iframe
+                document.body.removeChild(iframe);
+            }, 100);
+            
+        } catch (error) {
+            console.error('Error opening link:', error);
+            // Last resort
+            window.location.href = url;
+        }
     }
 
     // ============================================
@@ -578,7 +747,6 @@ class MovieApp {
         
         window.addEventListener('offline', () => {
             this.networkStatus.classList.remove('hidden');
-            this.showToast('You are offline', 'warning');
         });
     }
 
@@ -602,9 +770,15 @@ class MovieApp {
             this.appContainer.classList.remove('hidden');
             
             setTimeout(() => {
-                this.splashScreen.remove();
+                this.splashScreen.style.display = 'none';
             }, 500);
-        }, 2000);
+        }, 1500);
+    }
+
+    showErrorScreen() {
+        this.splashScreen.classList.add('hidden');
+        this.appContainer.classList.add('hidden');
+        this.errorScreen.classList.remove('hidden');
     }
 
     showToast(message, type = 'info') {
@@ -624,29 +798,34 @@ class MovieApp {
         
         this.toastContainer.appendChild(toast);
         
-        // Remove toast after 3 seconds
+        // Auto remove after 3 seconds
         setTimeout(() => {
             toast.classList.add('toast-out');
-            setTimeout(() => toast.remove(), 300);
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
         }, 3000);
     }
 }
 
-// Initialize app when DOM is ready
-let app;
+// ============================================
+// INITIALIZE APP
+// ============================================
+
+let app = null;
+
 document.addEventListener('DOMContentLoaded', () => {
     app = new MovieApp();
 });
 
-// Handle hash navigation on page load
-window.addEventListener('load', () => {
-    const hash = window.location.hash;
-    if (hash.startsWith('#movie=')) {
-        const movieId = hash.replace('#movie=', '');
-        setTimeout(() => {
-            if (app) {
-                app.showDetailView(movieId);
-            }
-        }, 2500);
+// Prevent context menu (optional)
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// Prevent pull-to-refresh on mobile (optional)
+document.body.addEventListener('touchmove', (e) => {
+    if (e.target === document.body) {
+        e.preventDefault();
     }
-});
+}, { passive: false });
